@@ -391,6 +391,7 @@ export default function App() {
   const [xrSupported, setXrSupported] = useState(false);
   const [xrMode, setXrMode] = useState(false);
   const [xrPlaced, setXrPlaced] = useState(false);
+  const [xrSurfaceFound, setXrSurfaceFound] = useState(false);
 
   // Init main 3D scene
   useEffect(() => {
@@ -568,10 +569,36 @@ export default function App() {
       worldGroup.visible = false;
       xrScene.add(worldGroup);
 
+      // ── Green plane indicator — shown when surface is detected ──
+      // A semi-transparent green rectangle that appears on the floor
+      // to indicate the system has found a flat surface (like the reference screenshots)
+      const planeMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.6, 0.6),
+        new THREE.MeshBasicMaterial({
+          color: 0x00cc44,
+          transparent: true,
+          opacity: 0.35,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        })
+      );
+      // Grid lines on the plane for visual feedback
+      const planeGrid = new THREE.GridHelper(0.6, 3, 0x00ff66, 0x00ff66);
+      planeGrid.material.transparent = true;
+      planeGrid.material.opacity = 0.6;
+      const planeGroup = new THREE.Group();
+      planeGroup.matrixAutoUpdate = false;
+      planeGroup.add(planeMesh);
+      planeGroup.add(planeGrid);
+      planeGroup.visible = false;
+      xrScene.add(planeGroup);
+
       let placedMatrix = new THREE.Matrix4();
       let pulseT = 0;
+      let surfaceFoundLocal = false;
       xrCakePlacedRef.current = false;
       setXrPlaced(false);
+      setXrSurfaceFound(false);
       setXrMode(true);
 
       // ── XR render loop ──
@@ -586,24 +613,36 @@ export default function App() {
             const hit = hits[0];
             const pose = hit.getPose(floorSpace);
             if (pose) {
+              // Show reticle ring
               reticleGroup.visible = true;
-              // Apply the hit pose matrix directly — this aligns the
-              // reticle to the detected surface normal automatically
               reticleGroup.matrix.fromArray(pose.transform.matrix);
-              // Animate pulse
+
+              // Show green plane indicator at same position
+              planeGroup.visible = true;
+              planeGroup.matrix.fromArray(pose.transform.matrix);
+
+              // Animate pulse on reticle
               const pulse = 0.55 + Math.abs(Math.sin(pulseT)) * 0.45;
               outerRing.material.opacity = pulse;
               innerCircle.material.opacity = pulse * 0.45;
+
+              // Notify UI that surface is found
+              if (!surfaceFoundLocal) {
+                surfaceFoundLocal = true;
+                setXrSurfaceFound(true);
+              }
             }
           } else {
             reticleGroup.visible = false;
+            planeGroup.visible = false;
+            if (surfaceFoundLocal) {
+              surfaceFoundLocal = false;
+              setXrSurfaceFound(false);
+            }
           }
         }
 
-        // If cake is placed, lock its world matrix every frame
-        // This is the key to spatial persistence —
-        // we re-apply the fixed placedMatrix so WebXR tracking
-        // keeps it anchored regardless of camera movement
+        // Re-apply world matrix every frame for spatial persistence
         if (xrCakePlacedRef.current) {
           worldGroup.matrix.copy(placedMatrix);
           worldGroup.matrixWorldNeedsUpdate = true;
@@ -618,6 +657,7 @@ export default function App() {
         if (!reticleGroup.visible) return;
 
         reticleGroup.visible = false;
+        planeGroup.visible = false;
 
         // Capture the exact world matrix at the moment of tap
         placedMatrix.copy(reticleGroup.matrix);
@@ -640,19 +680,7 @@ export default function App() {
         // sits exactly flush on the detected surface.
         cake.position.y = 0;
 
-        // Add subtle shadow on surface
-        const shadow = new THREE.Mesh(
-          new THREE.CircleGeometry(0.38, 48),
-          new THREE.MeshBasicMaterial({
-            color: 0x000000, transparent: true,
-            opacity: 0.28, depthWrite: false,
-          })
-        );
-        shadow.rotation.x = -Math.PI / 2;
-        shadow.position.y = 0.002;
-
         worldGroup.add(cake);
-        worldGroup.add(shadow);
 
         // Apply position and rotation from hit pose
         // Keep scale at 1 — cake's own scale handles sizing
@@ -672,10 +700,12 @@ export default function App() {
         xrRenderer.dispose();
         setXrMode(false);
         setXrPlaced(false);
+        setXrSurfaceFound(false);
         xrHitTestSourceRef.current = null;
         xrSessionRef.current = null;
         xrReticleRef.current = null;
         xrCakePlacedRef.current = false;
+        xrScene.remove(planeGroup);
         // Restore normal AR view
         if (arVideoRef.current) arVideoRef.current.style.display = "block";
         // Restart normal render loop
@@ -862,15 +892,6 @@ export default function App() {
       key.position.set(4, 10, 6); scene.add(key);
       const fill = new THREE.DirectionalLight(0xffe8d8, 0.7); fill.position.set(-4, 5, -3); scene.add(fill);
       const rim = new THREE.DirectionalLight(0xffd0b0, 0.4); rim.position.set(0, 3, -5); scene.add(rim);
-
-      // Build cake — centered, floating above camera surface
-      const shadowDisc = new THREE.Mesh(
-        new THREE.CircleGeometry(1.3, 48),
-        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18, depthWrite: false })
-      );
-      shadowDisc.rotation.x = -Math.PI / 2;
-      shadowDisc.position.set(0, -1.05, 0);
-      scene.add(shadowDisc);
 
       const cake = buildCake(cfg);
       cake.position.set(arPanXRef.current, arPanYRef.current, 0);
@@ -1186,31 +1207,33 @@ export default function App() {
 
               {/* WebXR DOM overlay — shown during XR session */}
               <div id="ar-overlay" style={{ position: "absolute", inset: 0, zIndex: 10, pointerEvents: "none" }}>
+                {xrMode && !xrPlaced && (
+                  <div style={{ position: "absolute", top: "38%", left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, pointerEvents: "none" }}>
+                    {/* Scanning text — exactly like the reference screenshot */}
+                    <div style={{ color: "#fff", fontSize: 17, fontWeight: 600, textShadow: "0 1px 6px rgba(0,0,0,0.8)", textAlign: "center" }}>
+                      {xrSurfaceFound ? "Flat surface detected!" : "Scanning for flat surfaces..."}
+                    </div>
+                    <div style={{ color: "rgba(255,255,255,0.82)", fontSize: 13, fontWeight: 400, textShadow: "0 1px 4px rgba(0,0,0,0.8)", textAlign: "center", paddingHorizontal: 20 }}>
+                      {xrSurfaceFound
+                        ? "Tap on the green area to place your cake"
+                        : "Try looking around with your camera a little bit."}
+                    </div>
+                  </div>
+                )}
+
+                {xrMode && xrPlaced && (
+                  <div style={{ position: "absolute", top: 40, left: 0, right: 0, display: "flex", justifyContent: "center" }}>
+                    <div style={{ background: "rgba(0,0,0,0.55)", borderRadius: 20, padding: "8px 20px", color: "#fff", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
+                      🎂 Walk around to view your cake 360°
+                    </div>
+                  </div>
+                )}
+
                 {xrMode && (
-                  <div style={{ position: "absolute", bottom: 100, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 10, pointerEvents: "auto" }}>
-                    {!xrPlaced ? (
-                      <div style={{ background: "rgba(0,0,0,0.72)", borderRadius: 20, padding: "12px 22px", textAlign: "center", maxWidth: 280 }}>
-                        <div style={{ fontSize: 22, marginBottom: 6 }}>📡</div>
-                        <div style={{ color: "#fff", fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Scanning for surface...</div>
-                        <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 12, lineHeight: 1.5 }}>
-                          Move your phone slowly over a table or floor.<br/>
-                          <span style={{ color: "#00ff88" }}>Tap when the green ring appears</span> to place the cake.
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div style={{ background: "rgba(0,0,0,0.72)", borderRadius: 20, padding: "12px 22px", textAlign: "center" }}>
-                          <div style={{ fontSize: 22, marginBottom: 4 }}>🎂</div>
-                          <div style={{ color: "#4caf50", fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Cake placed!</div>
-                          <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 12 }}>
-                            Walk around to view it from all sides
-                          </div>
-                        </div>
-                      </>
-                    )}
+                  <div style={{ position: "absolute", bottom: 48, left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "auto" }}>
                     <button
                       onClick={stopWebXR}
-                      style={{ background: "rgba(201,123,58,0.92)", border: "none", borderRadius: 20, padding: "10px 28px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }}
+                      style={{ background: "rgba(0,0,0,0.55)", border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 24, padding: "10px 28px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
                     >✕ Exit AR</button>
                   </div>
                 )}
