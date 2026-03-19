@@ -459,256 +459,220 @@ export default function App() {
   const startWebXR = async () => {
     if (!navigator.xr) return;
     try {
-      // Stop the regular non-XR animation loop first
       cancelAnimationFrame(arAnimRef.current);
       arReadyRef.current = false;
-
-      // Hide the manual video feed — WebXR provides its own camera passthrough
       if (arVideoRef.current) arVideoRef.current.style.display = "none";
 
       const canvas = arCanvasRef.current;
-      if (!canvas) return;
+      const body = arBodyRef.current;
+      if (!canvas || !body) return;
 
-      // ── Create a DEDICATED renderer just for WebXR ──
-      // Sharing the existing renderer causes conflicts on Android
       const xrRenderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: true,
-        alpha: true,
+        canvas, antialias: true, alpha: true,
         powerPreference: "high-performance",
-        preserveDrawingBuffer: true,
+        logarithmicDepthBuffer: true,
       });
       xrRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      xrRenderer.setSize(body.offsetWidth, body.offsetHeight, false);
       xrRenderer.xr.enabled = true;
       xrRenderer.autoClear = true;
       xrRenderer.setClearColor(0x000000, 0);
-      // Fix colors in XR — without this all materials appear washed out/white
+      xrRenderer.shadowMap.enabled = true;
+      xrRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
       xrRenderer.outputColorSpace = THREE.SRGBColorSpace;
       xrRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-      xrRenderer.toneMappingExposure = 1.2;
+      xrRenderer.toneMappingExposure = 1.0;
 
-      // ── Build a fresh scene for XR ──
       const xrScene = new THREE.Scene();
-      // Strong ambient so colors show clearly against real-world background
-      xrScene.add(new THREE.AmbientLight(0xffffff, 3.0));
-      const sunLight = new THREE.DirectionalLight(0xffffff, 3.0);
-      sunLight.position.set(5, 10, 5);
-      xrScene.add(sunLight);
-      const fillLight = new THREE.DirectionalLight(0xfff0e0, 1.5);
-      fillLight.position.set(-5, 5, -3);
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x888866, 1.2);
+      xrScene.add(hemiLight);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 2.8);
+      dirLight.position.set(3, 8, 4);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 1024;
+      dirLight.shadow.mapSize.height = 1024;
+      dirLight.shadow.camera.near = 0.01;
+      dirLight.shadow.camera.far = 20;
+      dirLight.shadow.camera.left = -2; dirLight.shadow.camera.right = 2;
+      dirLight.shadow.camera.top = 2; dirLight.shadow.camera.bottom = -2;
+      dirLight.shadow.bias = -0.001;
+      dirLight.shadow.normalBias = 0.02;
+      xrScene.add(dirLight);
+      const fillLight = new THREE.DirectionalLight(0xfff0e0, 1.0);
+      fillLight.position.set(-4, 4, -3);
       xrScene.add(fillLight);
-      const backLight = new THREE.DirectionalLight(0xffffff, 1.0);
-      backLight.position.set(0, 5, -8);
-      xrScene.add(backLight);
 
-      // ── Request WebXR session ──
-      // Note: We do NOT request "plane-detection" as a required feature
-      // because enabling it causes ARCore to render large green plane overlays.
-      // Hit-test alone gives us surface placement without the visual noise.
-      const session = await navigator.xr.requestSession("immersive-ar", {
-        requiredFeatures: ["hit-test", "local-floor"],
-        optionalFeatures: ["dom-overlay"],
-        domOverlay: { root: document.getElementById("ar-overlay") },
-      });
+      // Invisible contact shadow floor — transparent but receives shadows
+      const shadowFloor = new THREE.Mesh(
+        new THREE.PlaneGeometry(6, 6),
+        new THREE.ShadowMaterial({ opacity: 0.45, transparent: true, depthWrite: false })
+      );
+      shadowFloor.rotation.x = -Math.PI / 2;
+      shadowFloor.position.y = 0;
+      shadowFloor.receiveShadow = true;
+      shadowFloor.visible = false;
+      xrScene.add(shadowFloor);
+
+      // Request session with local-floor fallback to local
+      let session;
+      let refSpaceName = "local-floor";
+      try {
+        session = await navigator.xr.requestSession("immersive-ar", {
+          requiredFeatures: ["hit-test", "local-floor"],
+          optionalFeatures: ["dom-overlay", "light-estimation"],
+          domOverlay: { root: document.getElementById("ar-overlay") },
+        });
+      } catch {
+        refSpaceName = "local";
+        session = await navigator.xr.requestSession("immersive-ar", {
+          requiredFeatures: ["hit-test", "local"],
+          optionalFeatures: ["dom-overlay"],
+          domOverlay: { root: document.getElementById("ar-overlay") },
+        });
+      }
       xrSessionRef.current = session;
       await xrRenderer.xr.setSession(session);
 
-      // Resize renderer to match display
-      const body = arBodyRef.current;
-      if (body) xrRenderer.setSize(body.offsetWidth, body.offsetHeight, false);
-
-      // ── Reference spaces ──
-      // local-floor: Y=0 is always the real floor — most accurate for surface placement
-      const floorSpace = await session.requestReferenceSpace("local-floor");
-      // viewer space for hit-test ray origin (center of screen)
+      const refSpace = await session.requestReferenceSpace(refSpaceName);
       const viewerSpace = await session.requestReferenceSpace("viewer");
       const hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
       xrHitTestSourceRef.current = hitTestSource;
 
-      // ── Reticle — shown on detected surface ──
+      // Reticle
       const reticleGroup = new THREE.Group();
       reticleGroup.matrixAutoUpdate = false;
-
-      // Outer animated ring
       const outerRing = new THREE.Mesh(
-        new THREE.RingGeometry(0.12, 0.155, 48).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({
-          color: 0x00ff88, transparent: true, opacity: 0.9,
-          side: THREE.DoubleSide, depthWrite: false,
-        })
+        new THREE.RingGeometry(0.10, 0.13, 48).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false })
       );
-      // Inner filled circle
-      const innerCircle = new THREE.Mesh(
-        new THREE.CircleGeometry(0.06, 32).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({
-          color: 0x00ff88, transparent: true, opacity: 0.4,
-          side: THREE.DoubleSide, depthWrite: false,
-        })
+      const innerDot = new THREE.Mesh(
+        new THREE.CircleGeometry(0.018, 24).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })
       );
-      // 4 corner tick marks
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2;
-        const tick = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.05, 0.008).rotateX(-Math.PI / 2),
-          new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 1, side: THREE.DoubleSide })
-        );
-        tick.position.set(Math.cos(a) * 0.2, 0, Math.sin(a) * 0.2);
-        tick.rotation.y = a;
-        reticleGroup.add(tick);
-      }
-      reticleGroup.add(outerRing);
-      reticleGroup.add(innerCircle);
+      [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([sx, sz]) => {
+        const arm1 = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.006).rotateX(-Math.PI/2),
+          new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide, depthWrite: false }));
+        const arm2 = new THREE.Mesh(new THREE.PlaneGeometry(0.006, 0.04).rotateX(-Math.PI/2),
+          new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide, depthWrite: false }));
+        arm1.position.set(sx * 0.17, 0, sz * 0.155);
+        arm2.position.set(sx * 0.155, 0, sz * 0.17);
+        reticleGroup.add(arm1); reticleGroup.add(arm2);
+      });
+      reticleGroup.add(outerRing); reticleGroup.add(innerDot);
       reticleGroup.visible = false;
       xrScene.add(reticleGroup);
       xrReticleRef.current = reticleGroup;
 
-      // ── World group — cake anchored here, never moves ──
+      // Green plane indicator
+      const planeMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.55, 0.55),
+        new THREE.MeshBasicMaterial({ color: 0x00cc44, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false })
+      );
+      const planeGrid = new THREE.GridHelper(0.55, 3, 0x00ff66, 0x00ff66);
+      planeGrid.material.transparent = true; planeGrid.material.opacity = 0.55;
+      const planeGroup = new THREE.Group();
+      planeGroup.matrixAutoUpdate = false;
+      planeGroup.add(planeMesh); planeGroup.add(planeGrid);
+      planeGroup.visible = false;
+      xrScene.add(planeGroup);
+
+      // World anchor group
       const worldGroup = new THREE.Group();
-      // matrixAutoUpdate false = Three.js won't override our world matrix
       worldGroup.matrixAutoUpdate = false;
       worldGroup.visible = false;
       xrScene.add(worldGroup);
 
-      // ── Green plane indicator — shown when surface is detected ──
-      // A semi-transparent green rectangle that appears on the floor
-      // to indicate the system has found a flat surface (like the reference screenshots)
-      const planeMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.6, 0.6),
-        new THREE.MeshBasicMaterial({
-          color: 0x00cc44,
-          transparent: true,
-          opacity: 0.35,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        })
-      );
-      // Grid lines on the plane for visual feedback
-      const planeGrid = new THREE.GridHelper(0.6, 3, 0x00ff66, 0x00ff66);
-      planeGrid.material.transparent = true;
-      planeGrid.material.opacity = 0.6;
-      const planeGroup = new THREE.Group();
-      planeGroup.matrixAutoUpdate = false;
-      planeGroup.add(planeMesh);
-      planeGroup.add(planeGrid);
-      planeGroup.visible = false;
-      xrScene.add(planeGroup);
-
-      let placedMatrix = new THREE.Matrix4();
+      const anchorMatrix = new THREE.Matrix4();
+      // Pose smoothing history for anti-jitter
+      const poseHistory = [];
+      const POSE_SMOOTH = 6;
       let pulseT = 0;
       let surfaceFoundLocal = false;
       xrCakePlacedRef.current = false;
-      setXrPlaced(false);
-      setXrSurfaceFound(false);
-      setXrMode(true);
+      setXrPlaced(false); setXrSurfaceFound(false); setXrMode(true);
 
-      // ── XR render loop ──
       xrRenderer.setAnimationLoop((timestamp, frame) => {
         if (!frame) return;
-        pulseT += 0.05;
+        pulseT += 0.04;
 
-        // Hit test — only run before cake is placed
         if (!xrCakePlacedRef.current) {
           const hits = frame.getHitTestResults(hitTestSource);
           if (hits.length > 0) {
-            const hit = hits[0];
-            const pose = hit.getPose(floorSpace);
+            const pose = hits[0].getPose(refSpace);
             if (pose) {
-              // Show reticle ring
+              // Smooth position over last N frames to eliminate jitter
+              const m = new THREE.Matrix4().fromArray(pose.transform.matrix);
+              const p = new THREE.Vector3().setFromMatrixPosition(m);
+              const q = new THREE.Quaternion().setFromRotationMatrix(m);
+              poseHistory.push({ p, q });
+              if (poseHistory.length > POSE_SMOOTH) poseHistory.shift();
+              const avgP = new THREE.Vector3();
+              const avgQ = poseHistory[0].q.clone();
+              poseHistory.forEach((h, i) => {
+                avgP.add(h.p);
+                if (i > 0) THREE.Quaternion.slerp(avgQ, h.q, avgQ, 1 / (i + 1));
+              });
+              avgP.divideScalar(poseHistory.length);
+              const smoothMatrix = new THREE.Matrix4().compose(avgP, avgQ, new THREE.Vector3(1, 1, 1));
+
               reticleGroup.visible = true;
-              reticleGroup.matrix.fromArray(pose.transform.matrix);
-
-              // Show green plane indicator at same position
+              reticleGroup.matrix.copy(smoothMatrix);
               planeGroup.visible = true;
-              planeGroup.matrix.fromArray(pose.transform.matrix);
+              planeGroup.matrix.copy(smoothMatrix);
 
-              // Animate pulse on reticle
-              const pulse = 0.55 + Math.abs(Math.sin(pulseT)) * 0.45;
+              const pulse = 0.6 + Math.abs(Math.sin(pulseT)) * 0.4;
               outerRing.material.opacity = pulse;
-              innerCircle.material.opacity = pulse * 0.45;
+              innerDot.material.opacity = pulse;
 
-              // Notify UI that surface is found
-              if (!surfaceFoundLocal) {
-                surfaceFoundLocal = true;
-                setXrSurfaceFound(true);
-              }
+              if (!surfaceFoundLocal) { surfaceFoundLocal = true; setXrSurfaceFound(true); }
             }
           } else {
-            reticleGroup.visible = false;
-            planeGroup.visible = false;
-            if (surfaceFoundLocal) {
-              surfaceFoundLocal = false;
-              setXrSurfaceFound(false);
-            }
+            reticleGroup.visible = false; planeGroup.visible = false;
+            if (surfaceFoundLocal) { surfaceFoundLocal = false; setXrSurfaceFound(false); }
           }
         }
 
-        // Re-apply world matrix every frame for spatial persistence
+        // Spatial persistence — re-lock every frame
         if (xrCakePlacedRef.current) {
-          worldGroup.matrix.copy(placedMatrix);
+          worldGroup.matrix.copy(anchorMatrix);
           worldGroup.matrixWorldNeedsUpdate = true;
         }
 
         xrRenderer.render(xrScene, xrRenderer.xr.getCamera());
       });
 
-      // ── Tap to place cake ──
       session.addEventListener("select", () => {
-        if (xrCakePlacedRef.current) return;
-        if (!reticleGroup.visible) return;
+        if (xrCakePlacedRef.current || !reticleGroup.visible) return;
+        reticleGroup.visible = false; planeGroup.visible = false;
 
-        reticleGroup.visible = false;
-        planeGroup.visible = false;
+        const pos = new THREE.Vector3().setFromMatrixPosition(reticleGroup.matrix);
+        const quat = new THREE.Quaternion().setFromRotationMatrix(reticleGroup.matrix);
 
-        // Capture the exact world matrix at the moment of tap
-        placedMatrix.copy(reticleGroup.matrix);
-
-        // Decompose to get position + rotation
-        const pos = new THREE.Vector3();
-        const quat = new THREE.Quaternion();
-        const scl = new THREE.Vector3();
-        placedMatrix.decompose(pos, quat, scl);
-
-        // Build the cake
         const cake = buildCake(cfg);
-
-        // Scale to realistic real-world size (~30cm tall cake)
-        const xrScale = 0.25;
-        cake.scale.setScalar(xrScale);
-
-        // The cake's internal group has position.y = 0.07 and the plate
-        // bottom sits at y = -0.07 * scale. Zero this out so it
-        // sits exactly flush on the detected surface.
+        cake.traverse((child) => { if (child.isMesh) { child.castShadow = true; } });
+        cake.scale.setScalar(0.25);
         cake.position.y = 0;
-
         worldGroup.add(cake);
 
-        // Apply position and rotation from hit pose
-        // Keep scale at 1 — cake's own scale handles sizing
-        const placedNoScale = new THREE.Matrix4().compose(pos, quat, new THREE.Vector3(1, 1, 1));
-        placedMatrix.copy(placedNoScale);
-        worldGroup.matrix.copy(placedMatrix);
+        // Place contact shadow floor at exact surface point
+        shadowFloor.position.copy(pos);
+        shadowFloor.visible = true;
+
+        // Lock anchor — this coordinate NEVER changes
+        anchorMatrix.compose(pos, quat, new THREE.Vector3(1, 1, 1));
+        worldGroup.matrix.copy(anchorMatrix);
         worldGroup.matrixWorldNeedsUpdate = true;
         worldGroup.visible = true;
-
-        xrCakePlacedRef.current = true;
-        setXrPlaced(true);
+        xrCakePlacedRef.current = true; setXrPlaced(true);
       });
 
-      // ── Session end — full cleanup ──
       session.addEventListener("end", () => {
-        xrRenderer.setAnimationLoop(null);
-        xrRenderer.dispose();
-        setXrMode(false);
-        setXrPlaced(false);
-        setXrSurfaceFound(false);
-        xrHitTestSourceRef.current = null;
-        xrSessionRef.current = null;
-        xrReticleRef.current = null;
-        xrCakePlacedRef.current = false;
-        xrScene.remove(planeGroup);
-        // Restore normal AR view
+        xrRenderer.setAnimationLoop(null); xrRenderer.dispose();
+        setXrMode(false); setXrPlaced(false); setXrSurfaceFound(false);
+        xrHitTestSourceRef.current = null; xrSessionRef.current = null;
+        xrReticleRef.current = null; xrCakePlacedRef.current = false;
+        poseHistory.length = 0;
         if (arVideoRef.current) arVideoRef.current.style.display = "block";
-        // Restart normal render loop
         arReadyRef.current = true;
         const normalLoop = () => {
           if (!arReadyRef.current) return;
@@ -719,9 +683,7 @@ export default function App() {
             arCakeRef.current.position.x = arPanXRef.current;
             arCakeRef.current.position.y = arPanYRef.current;
           }
-          try {
-            arRendererRef.current?.render(arSceneRef.current, arCameraRef.current);
-          } catch (e) { console.error(e); }
+          try { arRendererRef.current?.render(arSceneRef.current, arCameraRef.current); } catch (e) { console.error(e); }
         };
         normalLoop();
       });
@@ -729,99 +691,7 @@ export default function App() {
     } catch (err) {
       console.error("WebXR error:", err);
       if (arVideoRef.current) arVideoRef.current.style.display = "block";
-      // Try fallback with just 'local' if 'local-floor' not supported
-      if (err.message?.includes("local-floor")) {
-        startWebXRFallback();
-      }
     }
-  };
-
-  // Fallback for devices that support hit-test but not local-floor
-  const startWebXRFallback = async () => {
-    if (!navigator.xr) return;
-    try {
-      if (arVideoRef.current) arVideoRef.current.style.display = "none";
-      cancelAnimationFrame(arAnimRef.current);
-      const canvas = arCanvasRef.current;
-      if (!canvas) return;
-
-      const xrRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-      xrRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      xrRenderer.xr.enabled = true;
-      xrRenderer.setClearColor(0x000000, 0);
-
-      const xrScene = new THREE.Scene();
-      xrScene.add(new THREE.AmbientLight(0xffffff, 2.0));
-      const sl = new THREE.DirectionalLight(0xffffff, 2.5); sl.position.set(5, 10, 5); xrScene.add(sl);
-
-      const session = await navigator.xr.requestSession("immersive-ar", {
-        requiredFeatures: ["hit-test", "local"],
-        optionalFeatures: ["dom-overlay"],
-        domOverlay: { root: document.getElementById("ar-overlay") },
-      });
-      xrSessionRef.current = session;
-      await xrRenderer.xr.setSession(session);
-
-      const localSpace = await session.requestReferenceSpace("local");
-      const viewerSpace = await session.requestReferenceSpace("viewer");
-      const hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
-
-      const reticle = new THREE.Mesh(
-        new THREE.RingGeometry(0.12, 0.155, 48).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
-      );
-      reticle.matrixAutoUpdate = false;
-      reticle.visible = false;
-      xrScene.add(reticle);
-      xrReticleRef.current = reticle;
-
-      const worldGroup = new THREE.Group();
-      worldGroup.matrixAutoUpdate = false;
-      worldGroup.visible = false;
-      xrScene.add(worldGroup);
-
-      let reticleMatrix = new THREE.Matrix4();
-      xrCakePlacedRef.current = false;
-      setXrPlaced(false);
-      setXrMode(true);
-
-      xrRenderer.setAnimationLoop((timestamp, frame) => {
-        if (!frame) return;
-        if (!xrCakePlacedRef.current) {
-          const hits = frame.getHitTestResults(hitTestSource);
-          if (hits.length > 0) {
-            const pose = hits[0].getPose(localSpace);
-            if (pose) {
-              reticle.visible = true;
-              reticleMatrix.fromArray(pose.transform.matrix);
-              reticle.matrix.copy(reticleMatrix);
-            }
-          } else { reticle.visible = false; }
-        }
-        if (xrCakePlacedRef.current) { worldGroup.matrixWorldNeedsUpdate = true; }
-        xrRenderer.render(xrScene, xrRenderer.xr.getCamera());
-      });
-
-      session.addEventListener("select", () => {
-        if (xrCakePlacedRef.current || !reticle.visible) return;
-        reticle.visible = false;
-        const pos = new THREE.Vector3(); const quat = new THREE.Quaternion(); const scl = new THREE.Vector3();
-        reticleMatrix.decompose(pos, quat, scl);
-        const cake = buildCake(cfg);
-        cake.scale.setScalar(0.25);
-        worldGroup.add(cake);
-        const m = new THREE.Matrix4().compose(pos, quat, new THREE.Vector3(1,1,1));
-        worldGroup.matrix.copy(m); worldGroup.matrixWorldNeedsUpdate = true; worldGroup.visible = true;
-        xrCakePlacedRef.current = true; setXrPlaced(true);
-      });
-
-      session.addEventListener("end", () => {
-        xrRenderer.setAnimationLoop(null); xrRenderer.dispose();
-        setXrMode(false); setXrPlaced(false);
-        xrSessionRef.current = null; xrReticleRef.current = null; xrCakePlacedRef.current = false;
-        if (arVideoRef.current) arVideoRef.current.style.display = "block";
-      });
-    } catch (e) { console.error("WebXR fallback error:", e); if (arVideoRef.current) arVideoRef.current.style.display = "block"; }
   };
 
   const stopWebXR = () => {
