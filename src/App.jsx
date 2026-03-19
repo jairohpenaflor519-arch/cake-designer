@@ -69,18 +69,18 @@ function makeCrumbTex() {
 function buildCake(cfg) {
   const group = new THREE.Group();
   const { layers, shape } = cfg;
-  const tierH = 0.55;
+  const tierH = 0.7;  // taller tiers
   const bumpMap = cfg.texture === "swirled" ? makeSwirledTex() : cfg.texture === "crumb" ? makeCrumbTex() : null;
   const rough = cfg.texture === "smooth" ? 0.28 : cfg.texture === "swirled" ? 0.52 : 0.88;
   const metal = cfg.texture === "smooth" ? 0.06 : 0.01;
 
   for (let i = 0; i < layers; i++) {
     const centerY = i * tierH + tierH / 2;
-    const s = 1 - i * 0.14;
+    const s = 1 - i * 0.18; // more aggressive shrink per tier so they look distinct
     let geom;
-    if (shape === "circle") geom = new THREE.CylinderGeometry(1.0 * s, 1.02 * s, tierH, 64);
-    else if (shape === "square") geom = new THREE.BoxGeometry(1.9 * s, tierH, 1.9 * s);
-    else geom = new THREE.BoxGeometry(2.2 * s, tierH, 1.6 * s);
+    if (shape === "circle") geom = new THREE.CylinderGeometry(0.85 * s, 0.87 * s, tierH, 64);
+    else if (shape === "square") geom = new THREE.BoxGeometry(1.7 * s, tierH, 1.7 * s);
+    else geom = new THREE.BoxGeometry(2.0 * s, tierH, 1.4 * s);
     const col = new THREE.Color(cfg.tierColors?.[i] ?? cfg.frostColor);
     const mat = new THREE.MeshStandardMaterial({ color: col, roughness: rough, metalness: metal, ...(bumpMap ? { bumpMap, bumpScale: cfg.texture === "swirled" ? 0.012 : 0.025 } : {}) });
     const mesh = new THREE.Mesh(geom, mat);
@@ -88,8 +88,8 @@ function buildCake(cfg) {
 
     const ringY = i * tierH + tierH;
     if (shape !== "circle") {
-      const ew = shape === "square" ? 1.9 * s : 2.2 * s;
-      const ed = shape === "square" ? 1.9 * s : 1.6 * s;
+      const ew = shape === "square" ? 1.7 * s : 2.0 * s;
+      const ed = shape === "square" ? 1.7 * s : 1.4 * s;
       const trimMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(cfg.accentColor), roughness: 0.28 });
       [
         { pos: [0, ringY, ed / 2], rot: [0, 0, 0], w: ew },
@@ -104,9 +104,9 @@ function buildCake(cfg) {
   }
 
   const plateY = -0.07;
-  const plate = new THREE.Mesh(new THREE.CylinderGeometry(1.65, 1.65, 0.09, 64), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.06, metalness: 0.8 }));
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.07, 64), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.06, metalness: 0.8 }));
   plate.position.y = plateY; plate.castShadow = true; plate.receiveShadow = true; group.add(plate);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(1.65, 0.08, 14, 64), new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.1, metalness: 0.7 }));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.06, 14, 64), new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.1, metalness: 0.7 }));
   rim.position.y = plateY; rim.rotation.x = Math.PI / 2; group.add(rim);
 
   const topY = layers * tierH + 0.05;
@@ -481,21 +481,32 @@ export default function App() {
       xrRenderer.xr.enabled = true;
       xrRenderer.autoClear = true;
       xrRenderer.setClearColor(0x000000, 0);
+      // Fix colors in XR — without this all materials appear washed out/white
+      xrRenderer.outputColorSpace = THREE.SRGBColorSpace;
+      xrRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+      xrRenderer.toneMappingExposure = 1.2;
 
       // ── Build a fresh scene for XR ──
       const xrScene = new THREE.Scene();
-      xrScene.add(new THREE.AmbientLight(0xffffff, 2.0));
-      const sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
+      // Strong ambient so colors show clearly against real-world background
+      xrScene.add(new THREE.AmbientLight(0xffffff, 3.0));
+      const sunLight = new THREE.DirectionalLight(0xffffff, 3.0);
       sunLight.position.set(5, 10, 5);
       xrScene.add(sunLight);
-      const fillLight = new THREE.DirectionalLight(0xffe8d8, 0.8);
+      const fillLight = new THREE.DirectionalLight(0xfff0e0, 1.5);
       fillLight.position.set(-5, 5, -3);
       xrScene.add(fillLight);
+      const backLight = new THREE.DirectionalLight(0xffffff, 1.0);
+      backLight.position.set(0, 5, -8);
+      xrScene.add(backLight);
 
       // ── Request WebXR session ──
+      // Note: We do NOT request "plane-detection" as a required feature
+      // because enabling it causes ARCore to render large green plane overlays.
+      // Hit-test alone gives us surface placement without the visual noise.
       const session = await navigator.xr.requestSession("immersive-ar", {
         requiredFeatures: ["hit-test", "local-floor"],
-        optionalFeatures: ["dom-overlay", "anchors", "plane-detection"],
+        optionalFeatures: ["dom-overlay"],
         domOverlay: { root: document.getElementById("ar-overlay") },
       });
       xrSessionRef.current = session;
