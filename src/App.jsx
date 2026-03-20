@@ -467,9 +467,11 @@ export default function App() {
   // Export cake as GLB and open in AR Quick Look (iPhone) or model-viewer (Android fallback)
   const [arExporting, setArExporting] = useState(false);
   const modelViewerRef = useRef(null);
+  const prevBlobUrlRef = useRef(null); // track old blob URL to revoke it
 
   const viewInAR = () => {
     setArExporting(true);
+
     const cake = buildCake(cfg);
     cake.scale.setScalar(0.25);
 
@@ -477,39 +479,61 @@ export default function App() {
     exporter.parse(
       cake,
       (glb) => {
+        // Revoke previous blob URL to free memory
+        if (prevBlobUrlRef.current) {
+          URL.revokeObjectURL(prevBlobUrlRef.current);
+          prevBlobUrlRef.current = null;
+        }
+
         const blob = new Blob([glb], { type: "model/gltf-binary" });
         const url = URL.createObjectURL(blob);
+        prevBlobUrlRef.current = url;
 
-        if (isIOS) {
-          // iPhone: create a hidden <a> with rel="ar" — triggers AR Quick Look
-          // AR Quick Look only works with .usdz on iOS, but model-viewer handles
-          // the conversion automatically via its own pipeline
-          // We use model-viewer's activate-ar approach instead
-          const mv = modelViewerRef.current;
-          if (mv) {
-            mv.src = url;
-            mv.style.display = "block";
-            // Auto-activate AR after model loads
-            mv.addEventListener("load", () => {
-              mv.activateAR();
-            }, { once: true });
+        const mv = modelViewerRef.current;
+        if (!mv) { setArExporting(false); return; }
+
+        // ── Reset model-viewer completely before reuse ──
+        // Remove src first so it treats the new one as a fresh load
+        mv.src = "";
+        mv.style.display = "block";
+
+        // Use ar-status event to detect when AR session starts/ends
+        const onArStatus = (e) => {
+          if (e.detail.status === "failed") {
+            console.warn("AR Quick Look failed:", e.detail);
           }
-        } else {
-          // Android fallback: open model-viewer with WebXR
-          const mv = modelViewerRef.current;
-          if (mv) {
-            mv.src = url;
-            mv.style.display = "block";
-            mv.addEventListener("load", () => {
-              mv.activateAR();
-            }, { once: true });
-          }
-        }
-        setArExporting(false);
+        };
+        mv.removeEventListener("ar-status", onArStatus);
+        mv.addEventListener("ar-status", onArStatus);
+
+        // Small delay after clearing src, then set new src
+        // This forces model-viewer to treat it as a brand new load
+        setTimeout(() => {
+          mv.src = url;
+          // Listen for model load then activate AR
+          const onLoad = () => {
+            mv.removeEventListener("load", onLoad);
+            setTimeout(() => {
+              try { mv.activateAR(); } catch (e) { console.error("activateAR error:", e); }
+              setArExporting(false);
+            }, 100);
+          };
+          mv.addEventListener("load", onLoad);
+        }, 50);
       },
       (err) => { console.error("GLTFExporter error:", err); setArExporting(false); },
       { binary: true }
     );
+  };
+
+  // Clean up blob URL when AR view closes
+  const cleanupModelViewer = () => {
+    if (prevBlobUrlRef.current) {
+      URL.revokeObjectURL(prevBlobUrlRef.current);
+      prevBlobUrlRef.current = null;
+    }
+    const mv = modelViewerRef.current;
+    if (mv) { mv.src = ""; mv.style.display = "none"; }
   };
   useEffect(() => {
     const checkXr = async () => {
@@ -949,6 +973,7 @@ export default function App() {
   const closeAR = () => {
     stopWebXR();
     stopArCamera();
+    cleanupModelViewer();
     setArOpen(false);
     setArMode("move");
     setXrMode(false);
@@ -1201,7 +1226,7 @@ export default function App() {
                   {/* iPhone AR Quick Look button */}
                   {isIOS && (
                     <button
-                      onClick={viewInAR}
+                      onClick={() => { cleanupModelViewer(); viewInAR(); }}
                       disabled={arExporting}
                       style={{
                         background: arExporting ? "rgba(100,100,100,0.8)" : "linear-gradient(135deg, #C97B3A, #e8913f)",
@@ -1209,6 +1234,7 @@ export default function App() {
                         color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
                         boxShadow: "0 4px 20px rgba(201,123,58,0.5)",
                         display: "flex", alignItems: "center", gap: 8,
+                        opacity: arExporting ? 0.7 : 1,
                       }}
                     >
                       <span style={{ fontSize: 18 }}>📱</span>
