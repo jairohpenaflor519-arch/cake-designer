@@ -385,7 +385,6 @@ export default function App() {
   const arCamStreamRef = useRef(null);
   // WebXR surface detection refs
   const xrSessionRef = useRef(null);
-  const xrHitTestSourceRef = useRef(null);
   const xrReticleRef = useRef(null);
   const xrCakePlacedRef = useRef(false);
   const [xrSupported, setXrSupported] = useState(false);
@@ -467,15 +466,14 @@ export default function App() {
       const body = arBodyRef.current;
       if (!canvas || !body) return;
 
+      // ── Dedicated WebXR renderer ──
       const xrRenderer = new THREE.WebGLRenderer({
         canvas, antialias: true, alpha: true,
         powerPreference: "high-performance",
-        logarithmicDepthBuffer: true,
       });
       xrRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       xrRenderer.setSize(body.offsetWidth, body.offsetHeight, false);
       xrRenderer.xr.enabled = true;
-      xrRenderer.autoClear = true;
       xrRenderer.setClearColor(0x000000, 0);
       xrRenderer.shadowMap.enabled = true;
       xrRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -483,43 +481,37 @@ export default function App() {
       xrRenderer.toneMapping = THREE.ACESFilmicToneMapping;
       xrRenderer.toneMappingExposure = 1.0;
 
+      // ── Scene ──
       const xrScene = new THREE.Scene();
-      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x888866, 1.2);
-      xrScene.add(hemiLight);
-      const dirLight = new THREE.DirectionalLight(0xffffff, 2.8);
-      dirLight.position.set(3, 8, 4);
-      dirLight.castShadow = true;
-      dirLight.shadow.mapSize.width = 1024;
-      dirLight.shadow.mapSize.height = 1024;
-      dirLight.shadow.camera.near = 0.01;
-      dirLight.shadow.camera.far = 20;
-      dirLight.shadow.camera.left = -2; dirLight.shadow.camera.right = 2;
-      dirLight.shadow.camera.top = 2; dirLight.shadow.camera.bottom = -2;
-      dirLight.shadow.bias = -0.001;
-      dirLight.shadow.normalBias = 0.02;
-      xrScene.add(dirLight);
-      const fillLight = new THREE.DirectionalLight(0xfff0e0, 1.0);
-      fillLight.position.set(-4, 4, -3);
-      xrScene.add(fillLight);
+      xrScene.add(new THREE.HemisphereLight(0xffffff, 0x888866, 1.8));
+      const sun = new THREE.DirectionalLight(0xffffff, 3.0);
+      sun.position.set(3, 8, 4);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(1024, 1024);
+      sun.shadow.camera.near = 0.01;
+      sun.shadow.camera.far = 20;
+      sun.shadow.camera.left = -2; sun.shadow.camera.right = 2;
+      sun.shadow.camera.top = 2; sun.shadow.camera.bottom = -2;
+      sun.shadow.bias = -0.001;
+      xrScene.add(sun);
+      xrScene.add(Object.assign(new THREE.DirectionalLight(0xfff0e0, 1.0), { position: new THREE.Vector3(-4, 4, -3) }));
 
-      // Invisible contact shadow floor — transparent but receives shadows
+      // Contact shadow floor — invisible but catches cake shadows
       const shadowFloor = new THREE.Mesh(
-        new THREE.PlaneGeometry(6, 6),
-        new THREE.ShadowMaterial({ opacity: 0.45, transparent: true, depthWrite: false })
+        new THREE.PlaneGeometry(10, 10),
+        new THREE.ShadowMaterial({ opacity: 0.4, transparent: true })
       );
       shadowFloor.rotation.x = -Math.PI / 2;
-      shadowFloor.position.y = 0;
       shadowFloor.receiveShadow = true;
       shadowFloor.visible = false;
       xrScene.add(shadowFloor);
 
-      // Request session with local-floor fallback to local
-      let session;
-      let refSpaceName = "local-floor";
+      // ── Session: try local-floor first, fall back to local ──
+      let session, refSpaceName = "local-floor";
       try {
         session = await navigator.xr.requestSession("immersive-ar", {
           requiredFeatures: ["hit-test", "local-floor"],
-          optionalFeatures: ["dom-overlay", "light-estimation"],
+          optionalFeatures: ["dom-overlay"],
           domOverlay: { root: document.getElementById("ar-overlay") },
         });
       } catch {
@@ -533,146 +525,147 @@ export default function App() {
       xrSessionRef.current = session;
       await xrRenderer.xr.setSession(session);
 
+      // ── Reference spaces ──
+      // refSpace = world coordinate system (local-floor or local)
+      // viewerSpace = where the ray comes from for hit testing
       const refSpace = await session.requestReferenceSpace(refSpaceName);
       const viewerSpace = await session.requestReferenceSpace("viewer");
       const hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
-      xrHitTestSourceRef.current = hitTestSource;
 
-      // Reticle
-      const reticleGroup = new THREE.Group();
-      reticleGroup.matrixAutoUpdate = false;
-      const outerRing = new THREE.Mesh(
-        new THREE.RingGeometry(0.10, 0.13, 48).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false })
-      );
-      const innerDot = new THREE.Mesh(
-        new THREE.CircleGeometry(0.018, 24).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })
-      );
-      [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([sx, sz]) => {
-        const arm1 = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.006).rotateX(-Math.PI/2),
-          new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide, depthWrite: false }));
-        const arm2 = new THREE.Mesh(new THREE.PlaneGeometry(0.006, 0.04).rotateX(-Math.PI/2),
-          new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide, depthWrite: false }));
-        arm1.position.set(sx * 0.17, 0, sz * 0.155);
-        arm2.position.set(sx * 0.155, 0, sz * 0.17);
-        reticleGroup.add(arm1); reticleGroup.add(arm2);
-      });
-      reticleGroup.add(outerRing); reticleGroup.add(innerDot);
-      reticleGroup.visible = false;
-      xrScene.add(reticleGroup);
-      xrReticleRef.current = reticleGroup;
+      // ── Reticle: small crosshair shown on detected surface ──
+      const reticle = new THREE.Group();
+      reticle.matrixAutoUpdate = false;
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
+      reticle.add(new THREE.Mesh(new THREE.RingGeometry(0.09, 0.12, 40).rotateX(-Math.PI / 2), ringMat));
+      reticle.add(new THREE.Mesh(new THREE.CircleGeometry(0.015, 20).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })));
+      reticle.visible = false;
+      xrScene.add(reticle);
+      xrReticleRef.current = reticle;
 
-      // Green plane indicator
-      const planeMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.55, 0.55),
-        new THREE.MeshBasicMaterial({ color: 0x00cc44, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false })
-      );
-      const planeGrid = new THREE.GridHelper(0.55, 3, 0x00ff66, 0x00ff66);
-      planeGrid.material.transparent = true; planeGrid.material.opacity = 0.55;
-      const planeGroup = new THREE.Group();
-      planeGroup.matrixAutoUpdate = false;
-      planeGroup.add(planeMesh); planeGroup.add(planeGrid);
-      planeGroup.visible = false;
-      xrScene.add(planeGroup);
+      // Green surface indicator
+      const surfaceIndicator = new THREE.Group();
+      surfaceIndicator.matrixAutoUpdate = false;
+      surfaceIndicator.add(new THREE.Mesh(
+        new THREE.PlaneGeometry(0.5, 0.5).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0x00cc44, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false })
+      ));
+      const grid = new THREE.GridHelper(0.5, 3, 0x00ff66, 0x00ff66);
+      grid.material.transparent = true; grid.material.opacity = 0.5;
+      surfaceIndicator.add(grid);
+      surfaceIndicator.visible = false;
+      xrScene.add(surfaceIndicator);
 
-      // World anchor group
-      const worldGroup = new THREE.Group();
-      worldGroup.matrixAutoUpdate = false;
-      worldGroup.visible = false;
-      xrScene.add(worldGroup);
+      // ── THE KEY: cakeAnchor is a plain THREE.Object3D child of the SCENE ──
+      // Its position/rotation are set ONCE in world space at placement time.
+      // Three.js + WebXR updates the camera pose every frame to match the
+      // real device position — the cake never moves because it's fixed in
+      // the scene's world coordinate system.
+      const cakeAnchor = new THREE.Object3D();
+      xrScene.add(cakeAnchor);
 
-      const anchorMatrix = new THREE.Matrix4();
-      // Pose smoothing history for anti-jitter
-      const poseHistory = [];
-      const POSE_SMOOTH = 6;
+      // Pose smoothing buffer
+      const posBuffer = [];
+      const SMOOTH_N = 5;
+
       let pulseT = 0;
-      let surfaceFoundLocal = false;
+      let cakePlaced = false;
+      let surfaceFound = false;
       xrCakePlacedRef.current = false;
       setXrPlaced(false); setXrSurfaceFound(false); setXrMode(true);
 
-      xrRenderer.setAnimationLoop((timestamp, frame) => {
+      xrRenderer.setAnimationLoop((_time, frame) => {
         if (!frame) return;
         pulseT += 0.04;
 
-        if (!xrCakePlacedRef.current) {
+        if (!cakePlaced) {
           const hits = frame.getHitTestResults(hitTestSource);
           if (hits.length > 0) {
             const pose = hits[0].getPose(refSpace);
             if (pose) {
-              // Smooth position over last N frames to eliminate jitter
-              const m = new THREE.Matrix4().fromArray(pose.transform.matrix);
-              const p = new THREE.Vector3().setFromMatrixPosition(m);
-              const q = new THREE.Quaternion().setFromRotationMatrix(m);
-              poseHistory.push({ p, q });
-              if (poseHistory.length > POSE_SMOOTH) poseHistory.shift();
-              const avgP = new THREE.Vector3();
-              const avgQ = poseHistory[0].q.clone();
-              poseHistory.forEach((h, i) => {
-                avgP.add(h.p);
-                if (i > 0) THREE.Quaternion.slerp(avgQ, h.q, avgQ, 1 / (i + 1));
-              });
-              avgP.divideScalar(poseHistory.length);
-              const smoothMatrix = new THREE.Matrix4().compose(avgP, avgQ, new THREE.Vector3(1, 1, 1));
+              // Smooth position to reduce jitter
+              const rawPos = new THREE.Vector3(
+                pose.transform.position.x,
+                pose.transform.position.y,
+                pose.transform.position.z
+              );
+              posBuffer.push(rawPos);
+              if (posBuffer.length > SMOOTH_N) posBuffer.shift();
+              const smoothPos = posBuffer.reduce(
+                (acc, p) => acc.add(p), new THREE.Vector3()
+              ).divideScalar(posBuffer.length);
 
-              reticleGroup.visible = true;
-              reticleGroup.matrix.copy(smoothMatrix);
-              planeGroup.visible = true;
-              planeGroup.matrix.copy(smoothMatrix);
+              // Update reticle and surface indicator to smoothed position
+              // Use the raw quaternion for surface orientation
+              const q = pose.transform.orientation;
+              const mat = new THREE.Matrix4().compose(
+                smoothPos,
+                new THREE.Quaternion(q.x, q.y, q.z, q.w),
+                new THREE.Vector3(1, 1, 1)
+              );
+              reticle.matrix.copy(mat);
+              reticle.visible = true;
+              surfaceIndicator.matrix.copy(mat);
+              surfaceIndicator.visible = true;
 
-              const pulse = 0.6 + Math.abs(Math.sin(pulseT)) * 0.4;
-              outerRing.material.opacity = pulse;
-              innerDot.material.opacity = pulse;
+              // Pulse ring
+              const p2 = 0.6 + Math.abs(Math.sin(pulseT)) * 0.38;
+              ringMat.opacity = p2;
 
-              if (!surfaceFoundLocal) { surfaceFoundLocal = true; setXrSurfaceFound(true); }
+              if (!surfaceFound) { surfaceFound = true; setXrSurfaceFound(true); }
             }
           } else {
-            reticleGroup.visible = false; planeGroup.visible = false;
-            if (surfaceFoundLocal) { surfaceFoundLocal = false; setXrSurfaceFound(false); }
+            reticle.visible = false;
+            surfaceIndicator.visible = false;
+            if (surfaceFound) { surfaceFound = false; setXrSurfaceFound(false); }
           }
-        }
-
-        // Spatial persistence — re-lock every frame
-        if (xrCakePlacedRef.current) {
-          worldGroup.matrix.copy(anchorMatrix);
-          worldGroup.matrixWorldNeedsUpdate = true;
         }
 
         xrRenderer.render(xrScene, xrRenderer.xr.getCamera());
       });
 
+      // ── TAP: place cake at detected surface position ──
       session.addEventListener("select", () => {
-        if (xrCakePlacedRef.current || !reticleGroup.visible) return;
-        reticleGroup.visible = false; planeGroup.visible = false;
+        if (cakePlaced || !reticle.visible) return;
 
-        const pos = new THREE.Vector3().setFromMatrixPosition(reticleGroup.matrix);
-        const quat = new THREE.Quaternion().setFromRotationMatrix(reticleGroup.matrix);
+        // Get final smoothed position from reticle matrix
+        const pos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
+        const quat = new THREE.Quaternion().setFromRotationMatrix(reticle.matrix);
 
+        // Hide scanning visuals
+        reticle.visible = false;
+        surfaceIndicator.visible = false;
+
+        // Build cake and add to anchor
         const cake = buildCake(cfg);
-        cake.traverse((child) => { if (child.isMesh) { child.castShadow = true; } });
+        cake.traverse(c => { if (c.isMesh) c.castShadow = true; });
         cake.scale.setScalar(0.25);
-        cake.position.y = 0;
-        worldGroup.add(cake);
+        cakeAnchor.add(cake);
 
-        // Place contact shadow floor at exact surface point
-        shadowFloor.position.copy(pos);
+        // SET POSITION ONCE — this is the world anchor coordinate.
+        // Because cakeAnchor.matrixAutoUpdate = true (default) and
+        // we never touch position again, Three.js + WebXR will
+        // automatically keep it fixed as the camera moves.
+        cakeAnchor.position.copy(pos);
+        cakeAnchor.quaternion.copy(quat);
+
+        // Place shadow catcher at same Y
+        shadowFloor.position.y = pos.y;
         shadowFloor.visible = true;
 
-        // Lock anchor — this coordinate NEVER changes
-        anchorMatrix.compose(pos, quat, new THREE.Vector3(1, 1, 1));
-        worldGroup.matrix.copy(anchorMatrix);
-        worldGroup.matrixWorldNeedsUpdate = true;
-        worldGroup.visible = true;
-        xrCakePlacedRef.current = true; setXrPlaced(true);
+        cakePlaced = true;
+        xrCakePlacedRef.current = true;
+        setXrPlaced(true);
       });
 
       session.addEventListener("end", () => {
-        xrRenderer.setAnimationLoop(null); xrRenderer.dispose();
+        xrRenderer.setAnimationLoop(null);
+        xrRenderer.dispose();
         setXrMode(false); setXrPlaced(false); setXrSurfaceFound(false);
-        xrHitTestSourceRef.current = null; xrSessionRef.current = null;
-        xrReticleRef.current = null; xrCakePlacedRef.current = false;
-        poseHistory.length = 0;
+        xrSessionRef.current = null; xrReticleRef.current = null;
+        xrCakePlacedRef.current = false; posBuffer.length = 0;
         if (arVideoRef.current) arVideoRef.current.style.display = "block";
+        // Restart normal view loop
         arReadyRef.current = true;
         const normalLoop = () => {
           if (!arReadyRef.current) return;
