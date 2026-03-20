@@ -339,8 +339,8 @@ function addLights(scene, dark) {
   }
 }
 
-const goldBtn = { width: 34, height: 34, borderRadius: "50%", border: "none", background: AC, color: "#fff", fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
-const plainBtn = { width: 34, height: 34, borderRadius: "50%", border: "1.5px solid #e8ddd0", background: "#fff", fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
+const goldBtn = { width: 38, height: 38, borderRadius: "50%", border: "none", background: "linear-gradient(135deg, #C97B3A, #E8913F)", color: "#fff", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 3px 10px rgba(201,123,58,0.35)", transition: "all 0.18s ease" };
+const plainBtn = { width: 38, height: 38, borderRadius: "50%", border: "1.5px solid #F0DFD0", background: "#fff", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(45,31,14,0.08)", transition: "all 0.18s ease" };
 
 export default function App() {
   const [cfg, setCfg] = useState({
@@ -744,58 +744,149 @@ export default function App() {
 
   return (
     <Layout>
-      <div style={{ maxWidth: 420, width: "100%", background: "#fff8f2", minHeight: 600, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", borderRadius: 16, border: "1px solid #f0e0d0", boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
+      <div style={{
+        maxWidth: 430, width: "100%",
+        background: "var(--cream, #FFF8F2)",
+        minHeight: "calc(100vh - 32px)",
+        maxHeight: "calc(100vh - 32px)",
+        display: "flex", flexDirection: "column",
+        position: "relative", overflow: "hidden",
+        borderRadius: 24,
+        boxShadow: "0 12px 48px rgba(45,31,14,0.18), 0 2px 8px rgba(45,31,14,0.08)",
+        border: "1px solid rgba(255,255,255,0.6)",
+      }}>
 
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid #f0e0d0", background: "#fff", flexShrink: 0 }}>
-          <div style={{ fontSize: 22 }}>🎂</div>
+        {/* ── Header ── */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "14px 18px",
+          background: "linear-gradient(135deg, #fff 0%, #FFF8F2 100%)",
+          borderBottom: "1px solid var(--border, #F0DFD0)",
+          flexShrink: 0,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 12,
+              background: "linear-gradient(135deg, #C97B3A, #E8913F)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 18, boxShadow: "0 3px 10px rgba(201,123,58,0.3)",
+            }}>🎂</div>
+            <div>
+              <div style={{
+                fontFamily: "var(--font-display, 'Playfair Display', Georgia, serif)",
+                fontSize: 16, fontWeight: 700,
+                color: "var(--text, #2D1F0E)",
+                letterSpacing: "-0.01em",
+              }}>Cake Designer</div>
+              <div style={{ fontSize: 10, color: "var(--text-light, #BBA890)", fontWeight: 500 }}>
+                {occasionLabel} · {cfg.layers} tier{cfg.layers > 1 ? "s" : ""} · {cfg.shape}
+              </div>
+            </div>
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setScanOpen(true)} style={plainBtn} title="Scan Cake">📷</button>
-            <button onClick={openAR} style={goldBtn} title="3D View">👓</button>
-            <button onClick={resetAll} style={plainBtn} title="Reset">↩️</button>
-            <button onClick={() => setSaveOpen(true)} style={goldBtn} title="Save">💾</button>
+            <button onClick={() => setScanOpen(true)} style={plainBtn} title="Scan Cake Shape">📷</button>
+            <button onClick={openAR} style={goldBtn} title="AR View">👓</button>
+            <button onClick={resetAll} style={plainBtn} title="Reset Design">↩️</button>
+            <button onClick={() => setSaveOpen(true)} style={goldBtn} title="Save Design">💾</button>
           </div>
         </div>
 
-        {/* 3D Canvas */}
-        <div ref={mainWrapRef} style={{ position: "relative", height: 280, overflow: "hidden", background: "#F5ECD7", flexShrink: 0 }}>
+        {/* ── 3D Canvas ── */}
+        <div ref={mainWrapRef} style={{
+          position: "relative", height: 260, overflow: "hidden",
+          background: "linear-gradient(160deg, #F5EAD8 0%, #EDE0CF 100%)",
+          flexShrink: 0,
+        }}>
           <canvas ref={mainCanvasRef} style={{ width: "100%", height: "100%", display: "block", cursor: "grab" }} />
-          <div style={{ position: "absolute", top: 12, left: 12, background: "rgba(255,255,255,0.85)", borderRadius: 20, padding: "5px 12px", fontSize: 12, color: "#888", pointerEvents: "none" }}>
-            Drag to rotate · Scroll to zoom
+          {/* Hint pill */}
+          <div style={{
+            position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
+            background: "rgba(255,255,255,0.82)", backdropFilter: "blur(8px)",
+            borderRadius: 20, padding: "5px 14px",
+            fontSize: 11, color: "var(--text-muted, #8B7355)", fontWeight: 500,
+            pointerEvents: "none", whiteSpace: "nowrap",
+            border: "1px solid rgba(255,255,255,0.9)",
+            boxShadow: "0 2px 8px rgba(45,31,14,0.08)",
+          }}>
+            ✋ Drag to rotate · 🔍 Scroll to zoom
           </div>
+          {/* AR quick launch */}
+          <button
+            onClick={openAR}
+            style={{
+              position: "absolute", bottom: 10, right: 10,
+              background: "linear-gradient(135deg, #C97B3A, #E8913F)",
+              border: "none", borderRadius: 20, padding: "6px 14px",
+              color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer",
+              boxShadow: "0 3px 12px rgba(201,123,58,0.4)",
+              display: "flex", alignItems: "center", gap: 5,
+            }}
+          >
+            <span>👓</span> AR View
+          </button>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: "flex", borderBottom: "1.5px solid #f0e0d0", padding: "0 4px", flexShrink: 0, background: "#fff" }}>
-          {["Shape", "Colors", "Decor", "Occasion"].map((t) => (
-            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "11px 2px", border: "none", background: "none", fontSize: 12, cursor: "pointer", borderBottom: tab === t ? `2.5px solid ${AC}` : "2.5px solid transparent", marginBottom: -1.5, color: tab === t ? AC : "#888", fontWeight: tab === t ? 700 : 500 }}>
-              {t}
+        {/* ── Tabs ── */}
+        <div style={{
+          display: "flex",
+          borderBottom: "1px solid var(--border, #F0DFD0)",
+          background: "#fff",
+          flexShrink: 0, padding: "0 8px",
+        }}>
+          {[
+            { id: "Shape",   icon: "⬡" },
+            { id: "Colors",  icon: "🎨" },
+            { id: "Decor",   icon: "✨" },
+            { id: "Occasion",icon: "🎀" },
+          ].map(({ id, icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              style={{
+                flex: 1, padding: "12px 2px 10px",
+                border: "none", background: "none", cursor: "pointer",
+                borderBottom: tab === id ? "2.5px solid #C97B3A" : "2.5px solid transparent",
+                marginBottom: -1,
+                color: tab === id ? "#C97B3A" : "var(--text-muted, #8B7355)",
+                fontWeight: tab === id ? 700 : 500,
+                fontSize: 11,
+                transition: "all 0.18s",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+              }}
+            >
+              <span style={{ fontSize: 14 }}>{icon}</span>
+              <span>{id}</span>
             </button>
           ))}
         </div>
 
-        {/* Tab Content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px", background: "#fff8f2" }}>
+        {/* ── Tab Content ── */}
+        <div style={{
+          flex: 1, overflowY: "auto",
+          padding: "16px 16px",
+          background: "var(--cream, #FFF8F2)",
+        }}>
           {tab === "Shape" && (
-            <>
+            <div style={{ animation: "fadeUp 0.2s ease" }}>
               <PanelSection title="Cake Shape">
                 <ShapeSelector value={cfg.shape} onChange={(v) => setCfg((p) => ({ ...p, shape: v }))} />
               </PanelSection>
               <PanelSection title="Tiers">
                 <LayerSlider value={cfg.layers} onChange={(v) => setCfg((p) => ({ ...p, layers: v }))} />
               </PanelSection>
-              <PanelSection title="Texture">
+              <PanelSection title="Frosting Texture">
                 <TextureSelector value={cfg.texture} onChange={(v) => setCfg((p) => ({ ...p, texture: v }))} />
               </PanelSection>
-            </>
+            </div>
           )}
+
           {tab === "Colors" && (
-            <>
+            <div style={{ animation: "fadeUp 0.2s ease" }}>
               <PanelSection title="Tier Colors">
                 {Array.from({ length: cfg.layers }).map((_, i) => (
                   <ColorPalette
                     key={i}
-                    label={`Tier ${i + 1}${i === 0 ? " (Bottom)" : i === cfg.layers - 1 ? " (Top)" : ""}`}
+                    label={`Tier ${i + 1}${i === 0 ? " · Bottom" : i === cfg.layers - 1 ? " · Top" : ""}`}
                     value={cfg.tierColors?.[i] ?? cfg.frostColor}
                     onChange={(v) => {
                       const next = [...(cfg.tierColors ?? ["#FFD1DC","#C8F0C8","#C8E0FF","#FFF0C8"])];
@@ -805,147 +896,255 @@ export default function App() {
                   />
                 ))}
               </PanelSection>
-              <div style={{ marginTop: 8 }}>
+              <PanelSection title="Accent & Topper Color">
                 <ColorPalette label="Accent Color" value={cfg.accentColor} onChange={(v) => setCfg((p) => ({ ...p, accentColor: v }))} />
-              </div>
-            </>
+              </PanelSection>
+            </div>
           )}
+
           {tab === "Decor" && (
-            <PanelSection title="Decorations">
-              <DecorationPanel value={cfg.decorations} onChange={(v) => setCfg((p) => ({ ...p, decorations: v }))} />
-            </PanelSection>
+            <div style={{ animation: "fadeUp 0.2s ease" }}>
+              <PanelSection title={`Decorations${cfg.decorations.length > 0 ? ` · ${cfg.decorations.length} selected` : ""}`}>
+                <DecorationPanel value={cfg.decorations} onChange={(v) => setCfg((p) => ({ ...p, decorations: v }))} />
+              </PanelSection>
+            </div>
           )}
+
           {tab === "Occasion" && (
-            <PanelSection title="Occasion">
-              <OccasionSelector
-                value={cfg.occasion}
-                onChange={setOcc}
-                bannerText={cfg.bannerText}
-                onBannerTextChange={(v) => setCfg((p) => ({ ...p, bannerText: v }))}
-                customName={cfg.customName}
-                onCustomNameChange={(v) => setCfg((p) => ({ ...p, customName: v }))}
-              />
-              {/* Banner toggle */}
-              <div style={{ marginTop: 16, padding: "14px", background: "#fff", borderRadius: 14, border: "1.5px solid #f0e0d0" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: cfg.showBanner ? 12 : 0 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#333" }}>🎀 Cake Banner</div>
-                    <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>Stick banner on top of cake</div>
+            <div style={{ animation: "fadeUp 0.2s ease" }}>
+              <PanelSection title="Occasion">
+                <OccasionSelector
+                  value={cfg.occasion}
+                  onChange={setOcc}
+                  bannerText={cfg.bannerText}
+                  onBannerTextChange={(v) => setCfg((p) => ({ ...p, bannerText: v }))}
+                  customName={cfg.customName}
+                  onCustomNameChange={(v) => setCfg((p) => ({ ...p, customName: v }))}
+                />
+              </PanelSection>
+
+              {/* Banner toggle card */}
+              <PanelSection title="Cake Banner Topper">
+                <div style={{
+                  background: "#fff", borderRadius: 16,
+                  border: "1.5px solid var(--border, #F0DFD0)",
+                  overflow: "hidden",
+                  boxShadow: "0 1px 4px rgba(45,31,14,0.06)",
+                }}>
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "14px 16px",
+                    borderBottom: cfg.showBanner ? "1px solid var(--border, #F0DFD0)" : "none",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text, #2D1F0E)" }}>🎀 Banner Topper</div>
+                      <div style={{ fontSize: 11, color: "var(--text-light, #BBA890)", marginTop: 2 }}>Decorative stick banner on cake</div>
+                    </div>
+                    <div
+                      onClick={() => setCfg((p) => ({ ...p, showBanner: !p.showBanner }))}
+                      style={{
+                        width: 46, height: 26, borderRadius: 13,
+                        cursor: "pointer", position: "relative",
+                        background: cfg.showBanner ? "linear-gradient(135deg, #C97B3A, #E8913F)" : "#E0D4C8",
+                        transition: "all 0.2s",
+                        boxShadow: cfg.showBanner ? "0 2px 8px rgba(201,123,58,0.35)" : "none",
+                      }}
+                    >
+                      <div style={{
+                        position: "absolute", top: 3,
+                        left: cfg.showBanner ? 23 : 3,
+                        width: 20, height: 20, borderRadius: "50%",
+                        background: "#fff",
+                        boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+                        transition: "left 0.2s",
+                      }} />
+                    </div>
                   </div>
-                  {/* Toggle switch */}
-                  <div
-                    onClick={() => setCfg((p) => ({ ...p, showBanner: !p.showBanner }))}
-                    style={{
-                      width: 44, height: 24, borderRadius: 12, cursor: "pointer", position: "relative", transition: "background 0.2s",
-                      background: cfg.showBanner ? AC : "#ddd",
-                    }}
-                  >
-                    <div style={{
-                      position: "absolute", top: 3, left: cfg.showBanner ? 23 : 3,
-                      width: 18, height: 18, borderRadius: "50%", background: "#fff",
-                      boxShadow: "0 1px 4px rgba(0,0,0,0.2)", transition: "left 0.2s",
-                    }} />
-                  </div>
+                  {cfg.showBanner && (
+                    <div style={{ padding: "12px 16px" }}>
+                      <input
+                        type="text"
+                        value={cfg.occasion === "Custom" ? cfg.customName || "" : cfg.bannerText}
+                        onChange={(e) => cfg.occasion === "Custom"
+                          ? setCfg((p) => ({ ...p, customName: e.target.value }))
+                          : setCfg((p) => ({ ...p, bannerText: e.target.value }))
+                        }
+                        placeholder="e.g. Happy Birthday!"
+                        style={{
+                          width: "100%", padding: "11px 14px",
+                          borderRadius: 10,
+                          border: "1.5px solid rgba(201,123,58,0.3)",
+                          background: "var(--amber-light, #FDF3E7)",
+                          fontSize: 13, fontWeight: 600,
+                          color: "var(--text, #2D1F0E)",
+                          outline: "none", fontStyle: "italic",
+                          fontFamily: "inherit",
+                        }}
+                        onFocus={(e) => { e.target.style.borderColor = "#C97B3A"; e.target.style.boxShadow = "0 0 0 3px rgba(201,123,58,0.1)"; }}
+                        onBlur={(e)  => { e.target.style.borderColor = "rgba(201,123,58,0.3)"; e.target.style.boxShadow = "none"; }}
+                      />
+                    </div>
+                  )}
                 </div>
-                {cfg.showBanner && (
-                  <input
-                    type="text"
-                    value={cfg.occasion === "Custom" ? cfg.customName || "" : cfg.bannerText}
-                    onChange={(e) => cfg.occasion === "Custom"
-                      ? setCfg((p) => ({ ...p, customName: e.target.value }))
-                      : setCfg((p) => ({ ...p, bannerText: e.target.value }))
-                    }
-                    placeholder="Banner text..."
-                    style={{
-                      width: "100%", padding: "9px 12px", borderRadius: 10,
-                      border: `1.5px solid ${AC}50`, background: AL,
-                      fontSize: 13, fontWeight: 600, color: "#333",
-                      outline: "none", fontStyle: "italic",
-                    }}
-                  />
-                )}
-              </div>
-            </PanelSection>
+              </PanelSection>
+            </div>
           )}
         </div>
 
-        {/* Bottom Bar */}
-        <div style={{ padding: "10px 14px", borderTop: "1px solid #f0e0d0", background: "#fff", flexShrink: 0 }}>
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-            <span style={{ padding: "3px 8px", borderRadius: 20, fontSize: 10, background: AL, color: AC, fontWeight: 600 }}>{occasionLabel}</span>
+        {/* ── Bottom Bar ── */}
+        <div style={{
+          padding: "12px 16px 16px",
+          borderTop: "1px solid var(--border, #F0DFD0)",
+          background: "#fff",
+          flexShrink: 0,
+        }}>
+          {/* Design tags */}
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 10 }}>
+            <span style={{
+              padding: "4px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700,
+              background: "linear-gradient(135deg, #FDF3E7, #FFF0DC)",
+              color: "#C97B3A",
+              border: "1px solid rgba(201,123,58,0.2)",
+            }}>{occasionLabel}</span>
             {[
-              `${cfg.layers} tier`,
+              `${cfg.layers} tier${cfg.layers > 1 ? "s" : ""}`,
               cfg.shape,
               cfg.texture,
-              bannerDisplay ? `"${bannerDisplay.slice(0, 12)}${bannerDisplay.length > 12 ? "…" : ""}"` : null,
-              cfg.decorations.length > 0 ? `${cfg.decorations.length} decos` : null,
+              bannerDisplay ? `"${bannerDisplay.slice(0, 10)}${bannerDisplay.length > 10 ? "…" : ""}"` : null,
+              cfg.decorations.length > 0 ? `${cfg.decorations.length} decor` : null,
             ].filter(Boolean).map((p, i) => (
-              <span key={i} style={{ padding: "3px 8px", borderRadius: 20, fontSize: 10, background: "#f5f5f5", color: "#555" }}>{p}</span>
+              <span key={i} style={{
+                padding: "4px 10px", borderRadius: 20, fontSize: 10,
+                background: "var(--cream, #FFF8F2)",
+                color: "var(--text-muted, #8B7355)",
+                border: "1px solid var(--border, #F0DFD0)",
+                fontWeight: 500,
+              }}>{p}</span>
             ))}
           </div>
-          <button onClick={() => setSaveOpen(true)} style={{ width: "100%", padding: 11, borderRadius: 10, background: AC, color: "#fff", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            💾 Save Design
+          <button
+            onClick={() => setSaveOpen(true)}
+            style={{
+              width: "100%", padding: "13px 0",
+              borderRadius: 14,
+              background: "linear-gradient(135deg, #C97B3A, #E8913F)",
+              color: "#fff", border: "none",
+              fontSize: 14, fontWeight: 700, cursor: "pointer",
+              boxShadow: "0 4px 16px rgba(201,123,58,0.35)",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}
+          >
+            <span>💾</span> Save My Design
           </button>
         </div>
 
-        {/* AR Screen */}
+        {/* ── AR Screen ── */}
         {arOpen && (
-          <div style={{ position: "absolute", inset: 0, zIndex: 200, display: "flex", flexDirection: "column", background: "#000", borderRadius: 16 }}>
-            {/* Top bar */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
-              <button onClick={closeAR} style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 20, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#fff" }}>✕ Exit</button>
-              <div style={{ color: "#fff", fontSize: 14, fontWeight: 600 }}>✨ 3D View</div>
-              <button onClick={resetArPosition} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 20, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#fff" }}>⟳ Reset</button>
+          <div style={{
+            position: "absolute", inset: 0, zIndex: 200,
+            display: "flex", flexDirection: "column",
+            background: "#000", borderRadius: 24,
+          }}>
+            {/* AR Top bar */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "12px 16px",
+              background: "rgba(0,0,0,0.5)", backdropFilter: "blur(12px)",
+              borderBottom: "1px solid rgba(255,255,255,0.08)",
+              flexShrink: 0,
+            }}>
+              <button
+                onClick={closeAR}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)",
+                  borderRadius: 20, padding: "7px 14px",
+                  cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#fff",
+                }}
+              >✕ Exit</button>
+              <div style={{
+                fontFamily: "var(--font-display,'Playfair Display',Georgia,serif)",
+                color: "#fff", fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em",
+              }}>✨ AR View</div>
+              <button
+                onClick={resetArPosition}
+                style={{
+                  background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)",
+                  borderRadius: 20, padding: "7px 14px",
+                  cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#fff",
+                }}
+              >⟳ Reset</button>
             </div>
 
-            {/* 3D canvas */}
-            <div ref={arBodyRef} style={{ flex: 1, position: "relative", overflow: "hidden", background: "#000" }}>
-              {/* Live camera feed — always visible as background */}
+            {/* AR Canvas area */}
+            <div ref={arBodyRef} style={{ flex: 1, position: "relative", overflow: "hidden" }}>
               <video
-                ref={arVideoRef}
-                autoPlay
-                playsInline
-                muted
+                ref={arVideoRef} autoPlay playsInline muted
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", zIndex: 1 }}
               />
-              {/* Three.js canvas — transparent, cake renders on top of camera */}
-              <canvas ref={arCanvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block", cursor: "grab", touchAction: "none", zIndex: 2 }} />
+              <canvas
+                ref={arCanvasRef}
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block", cursor: "grab", touchAction: "none", zIndex: 2 }}
+              />
 
-              {/* WebXR DOM overlay — shown during XR session */}
+              {/* WebXR overlay */}
               <div id="ar-overlay" style={{ position: "absolute", inset: 0, zIndex: 10, pointerEvents: "none" }}>
                 {xrMode && !xrPlaced && (
-                  <div style={{ position: "absolute", top: "38%", left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, pointerEvents: "none" }}>
-                    {/* Scanning text — exactly like the reference screenshot */}
-                    <div style={{ color: "#fff", fontSize: 17, fontWeight: 600, textShadow: "0 1px 6px rgba(0,0,0,0.8)", textAlign: "center" }}>
-                      {xrSurfaceFound ? "Flat surface detected!" : "Scanning for flat surfaces..."}
-                    </div>
-                    <div style={{ color: "rgba(255,255,255,0.82)", fontSize: 13, fontWeight: 400, textShadow: "0 1px 4px rgba(0,0,0,0.8)", textAlign: "center", paddingHorizontal: 20 }}>
-                      {xrSurfaceFound
-                        ? "Tap on the green area to place your cake"
-                        : "Try looking around with your camera a little bit."}
+                  <div style={{
+                    position: "absolute", top: "35%", left: 16, right: 16,
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                  }}>
+                    <div style={{
+                      background: "rgba(0,0,0,0.65)", backdropFilter: "blur(8px)",
+                      borderRadius: 16, padding: "14px 20px", textAlign: "center",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                    }}>
+                      <div style={{ fontSize: 24, marginBottom: 6 }}>
+                        {xrSurfaceFound ? "🟢" : "📡"}
+                      </div>
+                      <div style={{ color: "#fff", fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
+                        {xrSurfaceFound ? "Surface detected!" : "Scanning for flat surfaces..."}
+                      </div>
+                      <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 12, lineHeight: 1.5 }}>
+                        {xrSurfaceFound
+                          ? "Tap the green area to place your cake"
+                          : "Move your camera slowly over a floor or table"}
+                      </div>
                     </div>
                   </div>
                 )}
-
                 {xrMode && xrPlaced && (
-                  <div style={{ position: "absolute", top: 40, left: 0, right: 0, display: "flex", justifyContent: "center" }}>
-                    <div style={{ background: "rgba(0,0,0,0.55)", borderRadius: 20, padding: "8px 20px", color: "#fff", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
-                      🎂 Walk around to view your cake 360°
+                  <div style={{ position: "absolute", top: 16, left: 16, right: 16, display: "flex", justifyContent: "center" }}>
+                    <div style={{
+                      background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)",
+                      borderRadius: 20, padding: "10px 20px", textAlign: "center",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      display: "flex", alignItems: "center", gap: 8,
+                    }}>
+                      <span style={{ fontSize: 18 }}>🎂</span>
+                      <div>
+                        <div style={{ color: "#4caf50", fontSize: 13, fontWeight: 700 }}>Cake placed!</div>
+                        <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 11 }}>Walk around to view 360°</div>
+                      </div>
                     </div>
                   </div>
                 )}
-
                 {xrMode && (
-                  <div style={{ position: "absolute", bottom: 48, left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "auto" }}>
+                  <div style={{ position: "absolute", bottom: 50, left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "auto" }}>
                     <button
                       onClick={stopWebXR}
-                      style={{ background: "rgba(0,0,0,0.55)", border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 24, padding: "10px 28px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-                    >✕ Exit AR</button>
+                      style={{
+                        background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)",
+                        border: "1.5px solid rgba(255,255,255,0.2)",
+                        borderRadius: 24, padding: "10px 28px",
+                        color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >✕ Exit Surface AR</button>
                   </div>
                 )}
               </div>
 
-              {/* model-viewer — hidden, used for AR Quick Look on iOS and WebXR fallback */}
+              {/* model-viewer */}
               {/* @ts-ignore */}
               <model-viewer
                 ref={modelViewerRef}
@@ -953,65 +1152,86 @@ export default function App() {
                 ar-modes="webxr scene-viewer quick-look"
                 ar-scale="fixed"
                 camera-controls
-                style={{
-                  position: "absolute", inset: 0, width: "100%", height: "100%",
-                  display: "none", zIndex: 20, background: "transparent",
-                }}
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "none", zIndex: 20, background: "transparent" }}
               />
 
-              {/* Buttons — iOS shows Quick Look button, Android shows WebXR button */}
+              {/* View in AR button */}
               {!xrMode && !arLoading && (
-                <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 8 }}>
-
-                  {/* AR button — same experience for both iOS and Android via model-viewer */}
+                <div style={{
+                  position: "absolute", bottom: 18, left: 0, right: 0,
+                  display: "flex", justifyContent: "center", zIndex: 8,
+                }}>
                   <button
                     onClick={() => { cleanupModelViewer(); viewInAR(); }}
                     disabled={arExporting}
                     style={{
                       background: arExporting
-                        ? "rgba(100,100,100,0.8)"
-                        : "linear-gradient(135deg, #C97B3A, #e8913f)",
-                      border: "none", borderRadius: 24, padding: "12px 28px",
-                      color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                      boxShadow: "0 4px 20px rgba(201,123,58,0.5)",
-                      display: "flex", alignItems: "center", gap: 8,
+                        ? "rgba(80,80,80,0.8)"
+                        : "linear-gradient(135deg, #C97B3A, #E8913F)",
+                      border: "none", borderRadius: 28, padding: "14px 32px",
+                      color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                      boxShadow: arExporting ? "none" : "0 6px 24px rgba(201,123,58,0.5)",
+                      display: "flex", alignItems: "center", gap: 10,
                       opacity: arExporting ? 0.7 : 1,
+                      backdropFilter: "blur(8px)",
                     }}
                   >
-                    <span style={{ fontSize: 18 }}>📱</span>
+                    <span style={{ fontSize: 20 }}>📱</span>
                     {arExporting ? "Preparing AR..." : "View in AR"}
                   </button>
                 </div>
               )}
 
+              {/* Loading */}
               {arLoading && (
-                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.75)", zIndex: 15 }}>
-                  <div style={{ fontSize: 40, marginBottom: 14 }}>🎂</div>
-                  <div style={{ color: "#fff", fontSize: 14, fontWeight: 600 }}>Starting camera...</div>
-                  <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginTop: 6 }}>Point at a flat surface</div>
+                <div style={{
+                  position: "absolute", inset: 0, zIndex: 15,
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                  background: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)",
+                }}>
+                  <div style={{ fontSize: 44, marginBottom: 16 }}>🎂</div>
+                  <div style={{ color: "#fff", fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
+                    Starting camera...
+                  </div>
+                  <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 12 }}>
+                    Point at a flat surface
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Bottom bar */}
-            <div style={{ padding: "10px 14px 14px", background: "rgba(0,0,0,0.4)", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
-              {/* Move / Rotate toggle */}
-              <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 10 }}>
-                {[{ id: "move", label: "✋ Move" }, { id: "rotate", label: "🔄 Rotate" }].map(({ id, label }) => (
+            {/* AR Bottom bar */}
+            <div style={{
+              padding: "12px 16px 16px",
+              background: "rgba(0,0,0,0.5)", backdropFilter: "blur(12px)",
+              borderTop: "1px solid rgba(255,255,255,0.08)",
+              flexShrink: 0,
+            }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                {[{ id: "move", icon: "✋", label: "Move" }, { id: "rotate", icon: "🔄", label: "Rotate" }].map(({ id, icon, label }) => (
                   <button
                     key={id}
                     onClick={() => { setArMode(id); arModeRef.current = id; }}
                     style={{
-                      flex: 1, padding: "8px 0", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
-                      background: arMode === id ? AC : "rgba(255,255,255,0.1)",
-                      color: arMode === id ? "#fff" : "rgba(255,255,255,0.55)",
+                      flex: 1, padding: "10px 0", borderRadius: 20, border: "none",
+                      cursor: "pointer", fontSize: 12, fontWeight: 700,
+                      background: arMode === id
+                        ? "linear-gradient(135deg, #C97B3A, #E8913F)"
+                        : "rgba(255,255,255,0.1)",
+                      color: "#fff",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                      boxShadow: arMode === id ? "0 3px 12px rgba(201,123,58,0.4)" : "none",
                       transition: "all 0.2s",
                     }}
-                  >{label}</button>
+                  >
+                    <span>{icon}</span> {label}
+                  </button>
                 ))}
               </div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", textAlign: "center" }}>
-                {arMode === "move" ? "Drag to move · Pinch to zoom · Tap 📱 for surface AR" : "Drag to rotate 360° · Pinch to zoom"}
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", textAlign: "center" }}>
+                {arMode === "move"
+                  ? "Drag to reposition · Pinch to zoom · Tap 📱 for surface AR"
+                  : "Drag to rotate 360° · Pinch to zoom"}
               </div>
             </div>
           </div>
