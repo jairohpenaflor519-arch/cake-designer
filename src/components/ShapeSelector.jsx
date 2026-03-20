@@ -1,7 +1,7 @@
 const SHAPES = [
   { id: "circle",    label: "Round",  icon: "○", desc: "Classic" },
   { id: "square",    label: "Square", icon: "□", desc: "Modern"  },
-  { id: "rectangle", label: "Oblong", icon: "▭", desc: "Elegant" },
+  { id: "rectangle", label: "Rectangle", icon: "▭", desc: "Elegant" },
 ];
 
 export default function ShapeSelector({ value, onChange }) {
