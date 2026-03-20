@@ -447,12 +447,27 @@ export default function App() {
   }, [cfg]);
 
   // Check WebXR hit-test support
+  const [xrDebugInfo, setXrDebugInfo] = useState("");
   useEffect(() => {
-    if (navigator.xr) {
-      navigator.xr.isSessionSupported("immersive-ar").then((supported) => {
+    const checkXr = async () => {
+      const info = [];
+      if (!navigator.xr) {
+        info.push("❌ navigator.xr = undefined (no WebXR)");
+        setXrDebugInfo(info.join(" | "));
+        return;
+      }
+      info.push("✅ navigator.xr exists");
+      try {
+        const supported = await navigator.xr.isSessionSupported("immersive-ar");
         setXrSupported(supported);
-      }).catch(() => setXrSupported(false));
-    }
+        info.push(supported ? "✅ immersive-ar supported" : "❌ immersive-ar NOT supported");
+      } catch (e) {
+        info.push("❌ check failed: " + e.message);
+        setXrSupported(false);
+      }
+      setXrDebugInfo(info.join(" | "));
+    };
+    checkXr();
   }, []);
 
   const startWebXR = async () => {
@@ -1102,21 +1117,34 @@ export default function App() {
                 )}
               </div>
 
-              {/* WebXR launch button — only if supported */}
-              {xrSupported && !xrMode && !arLoading && (
-                <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 8 }}>
+              {/* WebXR launch button — always visible so user can try + see debug info */}
+              {!xrMode && !arLoading && (
+                <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 8 }}>
                   <button
                     onClick={startWebXR}
                     style={{
-                      background: "linear-gradient(135deg, #C97B3A, #e8913f)",
+                      background: xrSupported
+                        ? "linear-gradient(135deg, #C97B3A, #e8913f)"
+                        : "rgba(100,100,100,0.8)",
                       border: "none", borderRadius: 24, padding: "12px 28px",
                       color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                      boxShadow: "0 4px 20px rgba(201,123,58,0.5)",
+                      boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
                       display: "flex", alignItems: "center", gap: 8,
                     }}
                   >
-                    <span style={{ fontSize: 18 }}>🌐</span> Place on Surface
+                    <span style={{ fontSize: 18 }}>🌐</span>
+                    {xrSupported ? "Place on Surface" : "Try AR (may not be supported)"}
                   </button>
+                  {/* Debug info — shows exactly why AR is/isn't available */}
+                  {xrDebugInfo && (
+                    <div style={{
+                      background: "rgba(0,0,0,0.75)", borderRadius: 10,
+                      padding: "6px 12px", fontSize: 10, color: "#fff",
+                      maxWidth: "90%", textAlign: "center", lineHeight: 1.5,
+                    }}>
+                      {xrDebugInfo}
+                    </div>
+                  )}
                 </div>
               )}
 
