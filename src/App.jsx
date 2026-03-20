@@ -208,61 +208,86 @@ function buildCake(cfg) {
 
   const bannerText = cfg.occasion === "Custom" && cfg.customName ? cfg.customName : cfg.bannerText;
   if (cfg.showBanner && bannerText) {
+    // Use accent color for the topper
     const topperColor = new THREE.Color(cfg.accentColor);
-    const stickMat = new THREE.MeshStandardMaterial({ color: topperColor, roughness: 0.3, metalness: 0.1 });
-    const stickH = 0.65;
-    const stickR = 0.022;
-    const stickSpacing = 0.45;
 
-    // Two sticks
+    // Two pointed sticks going DOWN into the cake
+    const stickMat = new THREE.MeshStandardMaterial({ color: topperColor, roughness: 0.3, metalness: 0.1 });
+    const stickH = 0.7;
+    const stickR = 0.028;
+    const stickSpacing = 0.58;
+
     [-stickSpacing, stickSpacing].forEach((sx) => {
       const stick = new THREE.Mesh(new THREE.CylinderGeometry(stickR, stickR * 0.3, stickH, 8), stickMat);
-      stick.position.set(sx * topScale, topY + stickH / 2 - 0.1, 0);
+      stick.position.set(sx * topScale, topY + 0.02, 0);
       stick.castShadow = true; group.add(stick);
     });
 
-    // Single canvas — one clean render, no duplication
-    const W = 512, H = 180;
-    const fc = document.createElement("canvas");
-    fc.width = W; fc.height = H;
+    // Acrylic topper canvas — transparent bg, bold colored text arched upward
+    const W = 1024, H = 420;
+    const fc = document.createElement("canvas"); fc.width = W; fc.height = H;
     const fx = fc.getContext("2d");
     fx.clearRect(0, 0, W, H);
 
+    const label = bannerText.length > 18 ? bannerText.slice(0, 16) + "…" : bannerText;
+
+    // Parse accent color to CSS
     const r = Math.round(topperColor.r * 255);
     const g = Math.round(topperColor.g * 255);
     const b = Math.round(topperColor.b * 255);
     const colorStr = `rgb(${r},${g},${b})`;
-    const label = bannerText.length > 16 ? bannerText.slice(0, 14) + "…" : bannerText;
 
-    // Auto-fit font size to single line
-    let fontSize = 96;
-    fx.font = `900 ${fontSize}px Arial Black, system-ui, sans-serif`;
-    while (fx.measureText(label).width > W - 30 && fontSize > 32) {
+    // Draw bold text along an arc path
+    const words = label.split(" ");
+    const line1 = words.slice(0, Math.ceil(words.length / 2)).join(" ");
+    const line2 = words.slice(Math.ceil(words.length / 2)).join(" ");
+
+    // Fit font size
+    let fontSize = 148;
+    fx.font = `900 ${fontSize}px system-ui, Arial Black, sans-serif`;
+    const maxW = W - 40;
+    const longestLine = line1.length >= line2.length ? line1 : line2;
+    while (fx.measureText(longestLine).width > maxW && fontSize > 40) {
       fontSize -= 4;
-      fx.font = `900 ${fontSize}px Arial Black, system-ui, sans-serif`;
+      fx.font = `900 ${fontSize}px system-ui, Arial Black, sans-serif`;
     }
+
+    const drawLine = (text, cy) => {
+      // Dark outline for depth
+      fx.strokeStyle = `rgba(${Math.max(0,r-60)},${Math.max(0,g-60)},${Math.max(0,b-60)},0.9)`;
+      fx.lineWidth = fontSize * 0.12;
+      fx.lineJoin = "round";
+      fx.strokeText(text, W / 2, cy);
+      // Main fill
+      fx.fillStyle = colorStr;
+      fx.fillText(text, W / 2, cy);
+    };
 
     fx.textAlign = "center";
     fx.textBaseline = "middle";
 
-    // Outline
-    fx.strokeStyle = `rgba(${Math.max(0,r-50)},${Math.max(0,g-50)},${Math.max(0,b-50)},0.85)`;
-    fx.lineWidth = fontSize * 0.1;
-    fx.lineJoin = "round";
-    fx.strokeText(label, W / 2, H / 2);
-    // Fill
-    fx.fillStyle = colorStr;
-    fx.fillText(label, W / 2, H / 2);
+    if (line2) {
+      // Two lines — line1 slightly arched up, line2 slightly smaller below
+      drawLine(line1, H * 0.32);
+      let fontSize2 = Math.round(fontSize * 0.88);
+      fx.font = `900 ${fontSize2}px system-ui, Arial Black, sans-serif`;
+      while (fx.measureText(line2).width > maxW && fontSize2 > 30) {
+        fontSize2 -= 4;
+        fx.font = `900 ${fontSize2}px system-ui, Arial Black, sans-serif`;
+      }
+      drawLine(line2, H * 0.68);
+    } else {
+      drawLine(line1, H / 2);
+    }
 
     const ft = new THREE.CanvasTexture(fc);
-    // Smaller topper size
-    const topperW = stickSpacing * 2 * topScale + 0.18;
+    const topperW = stickSpacing * 2 * topScale + 0.55;
     const topperH = topperW * (H / W);
     const fp = new THREE.Mesh(
       new THREE.PlaneGeometry(topperW, topperH),
       new THREE.MeshBasicMaterial({ map: ft, transparent: true, side: THREE.DoubleSide, depthWrite: false, alphaTest: 0.05 })
     );
-    fp.position.set(0, topY + stickH - 0.05, 0.01);
+    fp.position.set(0, topY + topperH * 0.52, 0.01);
     group.add(fp);
   }
 
