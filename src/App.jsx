@@ -386,12 +386,9 @@ export default function App() {
   const arCamStreamRef = useRef(null);
   // WebXR surface detection refs
   const xrSessionRef = useRef(null);
-  const xrReticleRef = useRef(null);
-  const xrCakePlacedRef = useRef(false);
-  const [xrSupported, setXrSupported] = useState(false);
   const [xrMode, setXrMode] = useState(false);
   const [xrPlaced, setXrPlaced] = useState(false);
-  const [xrSurfaceFound, setXrSurfaceFound] = useState(false);
+  const [xrSurfaceFound] = useState(false);
 
   // Init main 3D scene
   useEffect(() => {
@@ -458,11 +455,7 @@ export default function App() {
     }
   }, []);
 
-  // Check WebXR hit-test support
-  const [xrDebugInfo, setXrDebugInfo] = useState("");
 
-  // Detect iOS — iPhone/iPad use AR Quick Look instead of WebXR
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
   // Export cake as GLB and open in AR Quick Look (iPhone) or model-viewer (Android fallback)
   const [arExporting, setArExporting] = useState(false);
@@ -534,259 +527,6 @@ export default function App() {
     }
     const mv = modelViewerRef.current;
     if (mv) { mv.src = ""; mv.style.display = "none"; }
-  };
-  useEffect(() => {
-    const checkXr = async () => {
-      const info = [];
-      if (!navigator.xr) {
-        info.push("❌ navigator.xr = undefined (no WebXR)");
-        setXrDebugInfo(info.join(" | "));
-        return;
-      }
-      info.push("✅ navigator.xr exists");
-      try {
-        const supported = await navigator.xr.isSessionSupported("immersive-ar");
-        setXrSupported(supported);
-        info.push(supported ? "✅ immersive-ar supported" : "❌ immersive-ar NOT supported");
-      } catch (e) {
-        info.push("❌ check failed: " + e.message);
-        setXrSupported(false);
-      }
-      setXrDebugInfo(info.join(" | "));
-    };
-    checkXr();
-  }, []);
-
-  const startWebXR = async () => {
-    if (!navigator.xr) return;
-    try {
-      cancelAnimationFrame(arAnimRef.current);
-      arReadyRef.current = false;
-      if (arVideoRef.current) arVideoRef.current.style.display = "none";
-
-      const canvas = arCanvasRef.current;
-      const body = arBodyRef.current;
-      if (!canvas || !body) return;
-
-      // ── Dedicated WebXR renderer ──
-      const xrRenderer = new THREE.WebGLRenderer({
-        canvas, antialias: true, alpha: true,
-        powerPreference: "high-performance",
-      });
-      xrRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      xrRenderer.setSize(body.offsetWidth, body.offsetHeight, false);
-      xrRenderer.xr.enabled = true;
-      xrRenderer.setClearColor(0x000000, 0);
-      xrRenderer.shadowMap.enabled = true;
-      xrRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      xrRenderer.outputColorSpace = THREE.SRGBColorSpace;
-      xrRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-      xrRenderer.toneMappingExposure = 1.0;
-
-      // ── Scene ──
-      const xrScene = new THREE.Scene();
-      xrScene.add(new THREE.HemisphereLight(0xffffff, 0x888866, 1.8));
-      const sun = new THREE.DirectionalLight(0xffffff, 3.0);
-      sun.position.set(3, 8, 4);
-      sun.castShadow = true;
-      sun.shadow.mapSize.set(1024, 1024);
-      sun.shadow.camera.near = 0.01;
-      sun.shadow.camera.far = 20;
-      sun.shadow.camera.left = -2; sun.shadow.camera.right = 2;
-      sun.shadow.camera.top = 2; sun.shadow.camera.bottom = -2;
-      sun.shadow.bias = -0.001;
-      xrScene.add(sun);
-      xrScene.add(Object.assign(new THREE.DirectionalLight(0xfff0e0, 1.0), { position: new THREE.Vector3(-4, 4, -3) }));
-
-      // Contact shadow floor — invisible but catches cake shadows
-      const shadowFloor = new THREE.Mesh(
-        new THREE.PlaneGeometry(10, 10),
-        new THREE.ShadowMaterial({ opacity: 0.4, transparent: true })
-      );
-      shadowFloor.rotation.x = -Math.PI / 2;
-      shadowFloor.receiveShadow = true;
-      shadowFloor.visible = false;
-      xrScene.add(shadowFloor);
-
-      // ── Session: try local-floor first, fall back to local ──
-      let session, refSpaceName = "local-floor";
-      try {
-        session = await navigator.xr.requestSession("immersive-ar", {
-          requiredFeatures: ["hit-test", "local-floor"],
-          optionalFeatures: ["dom-overlay"],
-          domOverlay: { root: document.getElementById("ar-overlay") },
-        });
-      } catch {
-        refSpaceName = "local";
-        session = await navigator.xr.requestSession("immersive-ar", {
-          requiredFeatures: ["hit-test", "local"],
-          optionalFeatures: ["dom-overlay"],
-          domOverlay: { root: document.getElementById("ar-overlay") },
-        });
-      }
-      xrSessionRef.current = session;
-      await xrRenderer.xr.setSession(session);
-
-      // ── Reference spaces ──
-      // refSpace = world coordinate system (local-floor or local)
-      // viewerSpace = where the ray comes from for hit testing
-      const refSpace = await session.requestReferenceSpace(refSpaceName);
-      const viewerSpace = await session.requestReferenceSpace("viewer");
-      const hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
-
-      // ── Reticle: small crosshair shown on detected surface ──
-      const reticle = new THREE.Group();
-      reticle.matrixAutoUpdate = false;
-      const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
-      reticle.add(new THREE.Mesh(new THREE.RingGeometry(0.09, 0.12, 40).rotateX(-Math.PI / 2), ringMat));
-      reticle.add(new THREE.Mesh(new THREE.CircleGeometry(0.015, 20).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })));
-      reticle.visible = false;
-      xrScene.add(reticle);
-      xrReticleRef.current = reticle;
-
-      // Green surface indicator
-      const surfaceIndicator = new THREE.Group();
-      surfaceIndicator.matrixAutoUpdate = false;
-      surfaceIndicator.add(new THREE.Mesh(
-        new THREE.PlaneGeometry(0.5, 0.5).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: 0x00cc44, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false })
-      ));
-      const grid = new THREE.GridHelper(0.5, 3, 0x00ff66, 0x00ff66);
-      grid.material.transparent = true; grid.material.opacity = 0.5;
-      surfaceIndicator.add(grid);
-      surfaceIndicator.visible = false;
-      xrScene.add(surfaceIndicator);
-
-      // ── THE KEY: cakeAnchor is a plain THREE.Object3D child of the SCENE ──
-      // Its position/rotation are set ONCE in world space at placement time.
-      // Three.js + WebXR updates the camera pose every frame to match the
-      // real device position — the cake never moves because it's fixed in
-      // the scene's world coordinate system.
-      const cakeAnchor = new THREE.Object3D();
-      xrScene.add(cakeAnchor);
-
-      // Pose smoothing buffer
-      const posBuffer = [];
-      const SMOOTH_N = 5;
-
-      let pulseT = 0;
-      let cakePlaced = false;
-      let surfaceFound = false;
-      xrCakePlacedRef.current = false;
-      setXrPlaced(false); setXrSurfaceFound(false); setXrMode(true);
-
-      xrRenderer.setAnimationLoop((_time, frame) => {
-        if (!frame) return;
-        pulseT += 0.04;
-
-        if (!cakePlaced) {
-          const hits = frame.getHitTestResults(hitTestSource);
-          if (hits.length > 0) {
-            const pose = hits[0].getPose(refSpace);
-            if (pose) {
-              // Smooth position to reduce jitter
-              const rawPos = new THREE.Vector3(
-                pose.transform.position.x,
-                pose.transform.position.y,
-                pose.transform.position.z
-              );
-              posBuffer.push(rawPos);
-              if (posBuffer.length > SMOOTH_N) posBuffer.shift();
-              const smoothPos = posBuffer.reduce(
-                (acc, p) => acc.add(p), new THREE.Vector3()
-              ).divideScalar(posBuffer.length);
-
-              // Update reticle and surface indicator to smoothed position
-              // Use the raw quaternion for surface orientation
-              const q = pose.transform.orientation;
-              const mat = new THREE.Matrix4().compose(
-                smoothPos,
-                new THREE.Quaternion(q.x, q.y, q.z, q.w),
-                new THREE.Vector3(1, 1, 1)
-              );
-              reticle.matrix.copy(mat);
-              reticle.visible = true;
-              surfaceIndicator.matrix.copy(mat);
-              surfaceIndicator.visible = true;
-
-              // Pulse ring
-              const p2 = 0.6 + Math.abs(Math.sin(pulseT)) * 0.38;
-              ringMat.opacity = p2;
-
-              if (!surfaceFound) { surfaceFound = true; setXrSurfaceFound(true); }
-            }
-          } else {
-            reticle.visible = false;
-            surfaceIndicator.visible = false;
-            if (surfaceFound) { surfaceFound = false; setXrSurfaceFound(false); }
-          }
-        }
-
-        xrRenderer.render(xrScene, xrRenderer.xr.getCamera());
-      });
-
-      // ── TAP: place cake at detected surface position ──
-      session.addEventListener("select", () => {
-        if (cakePlaced || !reticle.visible) return;
-
-        // Get final smoothed position from reticle matrix
-        const pos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
-        const quat = new THREE.Quaternion().setFromRotationMatrix(reticle.matrix);
-
-        // Hide scanning visuals
-        reticle.visible = false;
-        surfaceIndicator.visible = false;
-
-        // Build cake and add to anchor
-        const cake = buildCake(cfg);
-        cake.traverse(c => { if (c.isMesh) c.castShadow = true; });
-        cake.scale.setScalar(0.25);
-        cakeAnchor.add(cake);
-
-        // SET POSITION ONCE — this is the world anchor coordinate.
-        // Because cakeAnchor.matrixAutoUpdate = true (default) and
-        // we never touch position again, Three.js + WebXR will
-        // automatically keep it fixed as the camera moves.
-        cakeAnchor.position.copy(pos);
-        cakeAnchor.quaternion.copy(quat);
-
-        // Place shadow catcher at same Y
-        shadowFloor.position.y = pos.y;
-        shadowFloor.visible = true;
-
-        cakePlaced = true;
-        xrCakePlacedRef.current = true;
-        setXrPlaced(true);
-      });
-
-      session.addEventListener("end", () => {
-        xrRenderer.setAnimationLoop(null);
-        xrRenderer.dispose();
-        setXrMode(false); setXrPlaced(false); setXrSurfaceFound(false);
-        xrSessionRef.current = null; xrReticleRef.current = null;
-        xrCakePlacedRef.current = false; posBuffer.length = 0;
-        if (arVideoRef.current) arVideoRef.current.style.display = "block";
-        // Restart normal view loop
-        arReadyRef.current = true;
-        const normalLoop = () => {
-          if (!arReadyRef.current) return;
-          arAnimRef.current = requestAnimationFrame(normalLoop);
-          if (arCakeRef.current) {
-            arCakeRef.current.rotation.y = arRotYRef.current;
-            arCakeRef.current.rotation.x = arRotXRef.current;
-            arCakeRef.current.position.x = arPanXRef.current;
-            arCakeRef.current.position.y = arPanYRef.current;
-          }
-          try { arRendererRef.current?.render(arSceneRef.current, arCameraRef.current); } catch (e) { console.error(e); }
-        };
-        normalLoop();
-      });
-
-    } catch (err) {
-      console.error("WebXR error:", err);
-      if (arVideoRef.current) arVideoRef.current.style.display = "block";
-    }
   };
 
   const stopWebXR = () => {
@@ -1223,54 +963,24 @@ export default function App() {
               {!xrMode && !arLoading && (
                 <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 8 }}>
 
-                  {/* iPhone AR Quick Look button */}
-                  {isIOS && (
-                    <button
-                      onClick={() => { cleanupModelViewer(); viewInAR(); }}
-                      disabled={arExporting}
-                      style={{
-                        background: arExporting ? "rgba(100,100,100,0.8)" : "linear-gradient(135deg, #C97B3A, #e8913f)",
-                        border: "none", borderRadius: 24, padding: "12px 28px",
-                        color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                        boxShadow: "0 4px 20px rgba(201,123,58,0.5)",
-                        display: "flex", alignItems: "center", gap: 8,
-                        opacity: arExporting ? 0.7 : 1,
-                      }}
-                    >
-                      <span style={{ fontSize: 18 }}>📱</span>
-                      {arExporting ? "Preparing AR..." : "View in AR (iPhone)"}
-                    </button>
-                  )}
-
-                  {/* Android WebXR button */}
-                  {!isIOS && (
-                    <button
-                      onClick={startWebXR}
-                      style={{
-                        background: xrSupported
-                          ? "linear-gradient(135deg, #C97B3A, #e8913f)"
-                          : "rgba(100,100,100,0.8)",
-                        border: "none", borderRadius: 24, padding: "12px 28px",
-                        color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                        boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-                        display: "flex", alignItems: "center", gap: 8,
-                      }}
-                    >
-                      <span style={{ fontSize: 18 }}>🌐</span>
-                      {xrSupported ? "Place on Surface" : "Try AR (may not be supported)"}
-                    </button>
-                  )}
-
-                  {/* Debug info */}
-                  {xrDebugInfo && !isIOS && (
-                    <div style={{
-                      background: "rgba(0,0,0,0.75)", borderRadius: 10,
-                      padding: "6px 12px", fontSize: 10, color: "#fff",
-                      maxWidth: "90%", textAlign: "center", lineHeight: 1.5,
-                    }}>
-                      {xrDebugInfo}
-                    </div>
-                  )}
+                  {/* AR button — same experience for both iOS and Android via model-viewer */}
+                  <button
+                    onClick={() => { cleanupModelViewer(); viewInAR(); }}
+                    disabled={arExporting}
+                    style={{
+                      background: arExporting
+                        ? "rgba(100,100,100,0.8)"
+                        : "linear-gradient(135deg, #C97B3A, #e8913f)",
+                      border: "none", borderRadius: 24, padding: "12px 28px",
+                      color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      boxShadow: "0 4px 20px rgba(201,123,58,0.5)",
+                      display: "flex", alignItems: "center", gap: 8,
+                      opacity: arExporting ? 0.7 : 1,
+                    }}
+                  >
+                    <span style={{ fontSize: 18 }}>📱</span>
+                    {arExporting ? "Preparing AR..." : "View in AR"}
+                  </button>
                 </div>
               )}
 
@@ -1301,12 +1011,7 @@ export default function App() {
                 ))}
               </div>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", textAlign: "center" }}>
-                {isIOS
-                  ? "Drag to move/rotate · Tap 📱 for iPhone AR"
-                  : xrSupported
-                    ? (arMode === "move" ? "Drag to move · Pinch to zoom · Tap 🌐 for surface AR" : "Drag to rotate 360° · Pinch to zoom")
-                    : (arMode === "move" ? "Drag to move cake · Pinch to zoom" : "Drag to rotate 360° · Pinch to zoom")
-                }
+                {arMode === "move" ? "Drag to move · Pinch to zoom · Tap 📱 for surface AR" : "Drag to rotate 360° · Pinch to zoom"}
               </div>
             </div>
           </div>
