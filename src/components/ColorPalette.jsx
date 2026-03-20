@@ -7,64 +7,34 @@ const PRESETS = [
 
 export default function ColorPalette({ label, value, onChange }) {
   return (
-    <div style={{
-      background: "var(--white,#fff)",
-      borderRadius: 14,
-      padding: "14px",
-      border: "1.5px solid var(--border,#F0DFD0)",
-      boxShadow: "0 1px 4px rgba(45,31,14,0.06)",
-      marginBottom: 10,
-    }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text,#2D1F0E)" }}>{label}</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Current color swatch */}
-          <div style={{
-            width: 28, height: 28, borderRadius: "50%",
-            background: value,
-            border: "2px solid var(--border,#F0DFD0)",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
-          }} />
-          {/* Color picker */}
-          <label style={{
-            width: 32, height: 32, borderRadius: 8,
-            border: "1.5px solid var(--border,#F0DFD0)",
-            overflow: "hidden", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            background: "var(--cream,#FFF8F2)",
-            fontSize: 14,
-          }}>
-            🎨
-            <input
-              type="color"
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
-            />
-          </label>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {label}
+        </span>
+        <div className="flex items-center gap-2">
+          <div
+            className="w-5 h-5 rounded-full border-2 border-border shadow-sm"
+            style={{ backgroundColor: value }}
+          />
+          <input
+            type="color"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-7 h-7 rounded cursor-pointer border-none bg-transparent p-0"
+          />
         </div>
       </div>
-
-      {/* Preset grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(8,1fr)", gap: 6 }}>
+      <div className="grid grid-cols-8 gap-1.5">
         {PRESETS.map((color) => (
           <button
             key={color}
             onClick={() => onChange(color)}
+            className={`w-full aspect-square rounded-lg border-2 transition-all duration-150 hover:scale-110 ${
+              value === color ? "border-foreground scale-110 shadow-md" : "border-transparent"
+            }`}
+            style={{ backgroundColor: color }}
             title={color}
-            style={{
-              aspectRatio: "1",
-              borderRadius: 8,
-              background: color,
-              border: value === color
-                ? "2.5px solid var(--text,#2D1F0E)"
-                : "1.5px solid rgba(0,0,0,0.08)",
-              cursor: "pointer",
-              transform: value === color ? "scale(1.15)" : "scale(1)",
-              boxShadow: value === color ? "0 2px 8px rgba(0,0,0,0.2)" : "none",
-              transition: "all 0.15s ease",
-            }}
           />
         ))}
       </div>

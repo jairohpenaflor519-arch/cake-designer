@@ -1,112 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --amber:       #C97B3A;
-  --amber-light: #FDF3E7;
-  --amber-dark:  #A05E22;
-  --amber-mid:   #E8913F;
-  --cream:       #FFF8F2;
-  --cream-dark:  #F5EAD8;
-  --border:      #F0DFD0;
-  --text:        #2D1F0E;
-  --text-muted:  #8B7355;
-  --text-light:  #BBA890;
-  --white:       #FFFFFF;
-  --shadow-sm:   0 2px 8px rgba(45,31,14,0.08);
-  --shadow-md:   0 4px 20px rgba(45,31,14,0.12);
-  --shadow-lg:   0 8px 40px rgba(45,31,14,0.16);
-  --radius-sm:   8px;
-  --radius-md:   14px;
-  --radius-lg:   20px;
-  --radius-xl:   28px;
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-body:    'DM Sans', system-ui, sans-serif;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #root {
   width: 100%;
   min-height: 100vh;
-  background: #EDE0CF;
-  font-family: var(--font-body);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  background: #f0e8dc;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-/* Range input */
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 5px;
-  border-radius: 4px;
-  background: var(--border);
-  cursor: pointer;
-  outline: none;
-}
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--amber);
-  box-shadow: 0 2px 6px rgba(201,123,58,0.4);
-  cursor: pointer;
-  transition: transform 0.15s;
-}
-input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-}
-input[type="range"]::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--amber);
-  border: none;
-  box-shadow: 0 2px 6px rgba(201,123,58,0.4);
-  cursor: pointer;
+body {
+  font-family: system-ui, sans-serif;
 }
 
-/* Smooth transitions globally */
-button { transition: all 0.18s ease; }
-
-/* Tap highlight removal for mobile */
-* { -webkit-tap-highlight-color: transparent; }
-
-/* Animations */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.5; }
-}
-@keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
-}
-
-.animate-fadeUp  { animation: fadeUp  0.3s ease forwards; }
-.animate-fadeIn  { animation: fadeIn  0.25s ease forwards; }
-.animate-slideUp { animation: slideUp 0.25s ease forwards; }
+input[type="range"] { height: 6px; border-radius: 4px; cursor: pointer; }

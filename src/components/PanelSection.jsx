@@ -1,17 +1,9 @@
 export default function PanelSection({ title, children }) {
   return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: "0.12em",
-        textTransform: "uppercase",
-        color: "var(--text-light, #BBA890)",
-        marginBottom: 10,
-        paddingLeft: 2,
-      }}>
+    <div className="space-y-3">
+      <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
         {title}
-      </div>
+      </h3>
       {children}
     </div>
   );
