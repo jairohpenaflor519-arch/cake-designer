@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import Layout from "./components/Layout";
 import PanelSection from "./components/PanelSection";
 import ShapeSelector from "./components/ShapeSelector";
@@ -446,8 +447,70 @@ export default function App() {
     mainCakeRef.current = cake;
   }, [cfg]);
 
+  // Load model-viewer web component for AR Quick Look + WebXR fallback
+  useEffect(() => {
+    if (!document.querySelector('script[data-mv]')) {
+      const s = document.createElement("script");
+      s.type = "module";
+      s.dataset.mv = "1";
+      s.src = "https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js";
+      document.head.appendChild(s);
+    }
+  }, []);
+
   // Check WebXR hit-test support
   const [xrDebugInfo, setXrDebugInfo] = useState("");
+
+  // Detect iOS — iPhone/iPad use AR Quick Look instead of WebXR
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  // Export cake as GLB and open in AR Quick Look (iPhone) or model-viewer (Android fallback)
+  const [arExporting, setArExporting] = useState(false);
+  const modelViewerRef = useRef(null);
+
+  const viewInAR = () => {
+    setArExporting(true);
+    const cake = buildCake(cfg);
+    cake.scale.setScalar(0.25);
+
+    const exporter = new GLTFExporter();
+    exporter.parse(
+      cake,
+      (glb) => {
+        const blob = new Blob([glb], { type: "model/gltf-binary" });
+        const url = URL.createObjectURL(blob);
+
+        if (isIOS) {
+          // iPhone: create a hidden <a> with rel="ar" — triggers AR Quick Look
+          // AR Quick Look only works with .usdz on iOS, but model-viewer handles
+          // the conversion automatically via its own pipeline
+          // We use model-viewer's activate-ar approach instead
+          const mv = modelViewerRef.current;
+          if (mv) {
+            mv.src = url;
+            mv.style.display = "block";
+            // Auto-activate AR after model loads
+            mv.addEventListener("load", () => {
+              mv.activateAR();
+            }, { once: true });
+          }
+        } else {
+          // Android fallback: open model-viewer with WebXR
+          const mv = modelViewerRef.current;
+          if (mv) {
+            mv.src = url;
+            mv.style.display = "block";
+            mv.addEventListener("load", () => {
+              mv.activateAR();
+            }, { once: true });
+          }
+        }
+        setArExporting(false);
+      },
+      (err) => { console.error("GLTFExporter error:", err); setArExporting(false); },
+      { binary: true }
+    );
+  };
   useEffect(() => {
     const checkXr = async () => {
       const info = [];
@@ -1117,26 +1180,63 @@ export default function App() {
                 )}
               </div>
 
-              {/* WebXR launch button — always visible so user can try + see debug info */}
+              {/* model-viewer — hidden, used for AR Quick Look on iOS and WebXR fallback */}
+              {/* @ts-ignore */}
+              <model-viewer
+                ref={modelViewerRef}
+                ar
+                ar-modes="webxr scene-viewer quick-look"
+                ar-scale="fixed"
+                camera-controls
+                style={{
+                  position: "absolute", inset: 0, width: "100%", height: "100%",
+                  display: "none", zIndex: 20, background: "transparent",
+                }}
+              />
+
+              {/* Buttons — iOS shows Quick Look button, Android shows WebXR button */}
               {!xrMode && !arLoading && (
                 <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 8 }}>
-                  <button
-                    onClick={startWebXR}
-                    style={{
-                      background: xrSupported
-                        ? "linear-gradient(135deg, #C97B3A, #e8913f)"
-                        : "rgba(100,100,100,0.8)",
-                      border: "none", borderRadius: 24, padding: "12px 28px",
-                      color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                      boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-                      display: "flex", alignItems: "center", gap: 8,
-                    }}
-                  >
-                    <span style={{ fontSize: 18 }}>🌐</span>
-                    {xrSupported ? "Place on Surface" : "Try AR (may not be supported)"}
-                  </button>
-                  {/* Debug info — shows exactly why AR is/isn't available */}
-                  {xrDebugInfo && (
+
+                  {/* iPhone AR Quick Look button */}
+                  {isIOS && (
+                    <button
+                      onClick={viewInAR}
+                      disabled={arExporting}
+                      style={{
+                        background: arExporting ? "rgba(100,100,100,0.8)" : "linear-gradient(135deg, #C97B3A, #e8913f)",
+                        border: "none", borderRadius: 24, padding: "12px 28px",
+                        color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                        boxShadow: "0 4px 20px rgba(201,123,58,0.5)",
+                        display: "flex", alignItems: "center", gap: 8,
+                      }}
+                    >
+                      <span style={{ fontSize: 18 }}>📱</span>
+                      {arExporting ? "Preparing AR..." : "View in AR (iPhone)"}
+                    </button>
+                  )}
+
+                  {/* Android WebXR button */}
+                  {!isIOS && (
+                    <button
+                      onClick={startWebXR}
+                      style={{
+                        background: xrSupported
+                          ? "linear-gradient(135deg, #C97B3A, #e8913f)"
+                          : "rgba(100,100,100,0.8)",
+                        border: "none", borderRadius: 24, padding: "12px 28px",
+                        color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                        boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                        display: "flex", alignItems: "center", gap: 8,
+                      }}
+                    >
+                      <span style={{ fontSize: 18 }}>🌐</span>
+                      {xrSupported ? "Place on Surface" : "Try AR (may not be supported)"}
+                    </button>
+                  )}
+
+                  {/* Debug info */}
+                  {xrDebugInfo && !isIOS && (
                     <div style={{
                       background: "rgba(0,0,0,0.75)", borderRadius: 10,
                       padding: "6px 12px", fontSize: 10, color: "#fff",
@@ -1175,9 +1275,11 @@ export default function App() {
                 ))}
               </div>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", textAlign: "center" }}>
-                {xrSupported
-                  ? (arMode === "move" ? "Drag to move · Scroll/Pinch to zoom · Tap 🌐 for surface AR" : "Drag to rotate 360° · Scroll / Pinch to zoom")
-                  : (arMode === "move" ? "Drag to move cake · Scroll / Pinch to zoom" : "Drag to rotate 360° · Scroll / Pinch to zoom")
+                {isIOS
+                  ? "Drag to move/rotate · Tap 📱 for iPhone AR"
+                  : xrSupported
+                    ? (arMode === "move" ? "Drag to move · Pinch to zoom · Tap 🌐 for surface AR" : "Drag to rotate 360° · Pinch to zoom")
+                    : (arMode === "move" ? "Drag to move cake · Pinch to zoom" : "Drag to rotate 360° · Pinch to zoom")
                 }
               </div>
             </div>
